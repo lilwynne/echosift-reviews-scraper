@@ -78,6 +78,10 @@ http://127.0.0.1:3000
   - Shared scrape error-code to HTTP-status mapping.
 - `scripts/test-reviews.mjs`
   - Local test script that calls `POST /api/reviews`.
+- `actors/product-hunt-reviews/`
+  - Self-built Apify actor for Product Hunt product review scraping.
+  - Uses Node/TypeScript, HTTP fetch, and HTML parsing. It does not use browser automation.
+  - Deployed Apify actor: `feature_map/product-hunt-reviews` (`xHkiWaZEikt9m0kBy`).
 
 ## API Route Implemented
 
@@ -150,7 +154,7 @@ APIFY_API_TOKEN=your_apify_api_token
 Optional environment variables:
 
 ```env
-APIFY_PRODUCT_HUNT_ACTOR_ID=vulnv~producthunt-scraper
+APIFY_PRODUCT_HUNT_ACTOR_ID=feature_map/product-hunt-reviews
 REVIEWS_MAX_REVIEWS=100
 REVIEWS_REQUEST_TIMEOUT_MS=120000
 APIFY_MAX_REVIEWS=100
@@ -161,6 +165,11 @@ APIFY_RUN_TIMEOUT_SECS=120
 Implementation details:
 
 - Product Hunt still uses Apify REST endpoint `POST /v2/acts/{actorId}/run-sync-get-dataset-items`.
+- The current self-built Product Hunt actor lives in `actors/product-hunt-reviews` and is deployed privately under the user's Apify account as `feature_map/product-hunt-reviews`.
+- The actor input is compatible with the backend payload: `start_urls: [{ url }]`, `max_comments`, and optional `proxyConfiguration`.
+- Actor output keeps fields recognized by the normalizer: `id`, `body`, `author`, `created_at`, `vote_count`, `product_name`, `product_url`, `url`, plus extra diagnostics and section fields.
+- Actor `proxyConfiguration` now defaults to `{ "useApifyProxy": false }` because this Apify account does not have access to the `DATACENTER` proxy group.
+- Actor cloud I/O uses Apify runtime env vars `ACTOR_DEFAULT_KEY_VALUE_STORE_ID`, `ACTOR_INPUT_KEY`, and `ACTOR_DEFAULT_DATASET_ID`; this was fixed after deployment testing showed the previous `APIFY_DEFAULT_*` names did not read run input.
 - App Store uses Apple public RSS:
   `https://itunes.apple.com/{country}/rss/customerreviews/page={page}/id={appId}/sortby=mostrecent/json`
 - Google Play uses the `google-play-scraper` npm package.
@@ -211,6 +220,7 @@ Other error codes currently implemented:
 - Added `lib/api-errors.ts`
 - Added `app/api/reviews/route.ts`
 - Added `scripts/test-reviews.mjs`
+- Added `actors/product-hunt-reviews/`
 - Added `docs/issue.md`
 - Added `docs/pr-description.md`
 - Updated `app/api/analyze/route.ts`
@@ -248,12 +258,14 @@ Last successful checks:
 ```bash
 npm run lint
 npm run build
+npm run actor:test
 ```
 
 Results:
 
 - ESLint: passed with no warnings or errors.
 - Production build: passed.
+- Product Hunt actor TypeScript build and parser fixture tests passed.
 - Next build output includes:
 
 ```text
@@ -285,6 +297,23 @@ Invalid URL smoke test returned:
 }
 ```
 
+Apify actor deployment:
+
+```text
+Actor ID: feature_map/product-hunt-reviews
+Internal ID: xHkiWaZEikt9m0kBy
+Latest build tested: 0.1.3 / latest
+```
+
+Apify actor smoke tests:
+
+- Deployment/build succeeded.
+- Actor successfully reads Apify run input after the `ACTOR_DEFAULT_*` env var fix.
+- Test input: `https://www.producthunt.com/products/claude`, `max_comments: 20`.
+- No-proxy run finished successfully but returned one diagnostic item with `code: "SCRAPE_EMPTY_OR_BLOCKED"` and `count: 0`.
+- Run with accessible proxy group `BUYPROXIES94952` also finished, but all Product Hunt page fetches returned `fetch failed`.
+- Conclusion: actor deployment is complete, but Product Hunt review extraction still needs further page/proxy strategy work before it can be treated as production-ready.
+
 Runtime recovery performed after build/dev cache mismatch:
 
 - A stale Next dev process was listening on `127.0.0.1:3000`.
@@ -297,15 +326,18 @@ Runtime recovery performed after build/dev cache mismatch:
 - Starting Next dev server requires escalation because sandbox blocks local port listening.
 - Do not run destructive git commands.
 - Git is initialized now, but the working tree currently shows the project files as untracked.
-- Real Product Hunt smoke tests require a valid `APIFY_API_TOKEN` in `.env.local`.
+- Product Hunt backend calls require a valid `APIFY_API_TOKEN` in `.env.local`.
+- The deployed self-built actor currently starts correctly but does not extract live Product Hunt review items from the tested Claude page. Treat Product Hunt ingestion as deployed but not functionally validated for real reviews.
+- Apify account proxy access observed during deployment: `DATACENTER` is not available; `BUYPROXIES94952` is available but produced `fetch failed` for Product Hunt pages in the actor smoke test.
 - App Store RSS may return an empty feed for some app/country combinations.
 - Google Play scraping depends on public Google Play network availability and may timeout in restricted networks.
 - `POST /api/analyze` now depends on scraping before returning the mock dashboard. Product Hunt without `APIFY_API_TOKEN` returns `MISSING_APIFY_API_TOKEN`.
 
 ## Recommended Next Steps
 
-1. Add `.env.local` with `APIFY_API_TOKEN` and run a real `/api/reviews` Product Hunt smoke test against the user's self-built actor.
-2. Confirm the default Product Hunt Apify actor input schema matches the self-built actor; override `APIFY_PRODUCT_HUNT_ACTOR_ID` if needed.
-3. Decide whether `/api/analyze` should fail hard on scraping errors or fall back to the existing mock dashboard during MVP demos.
-4. Wire frontend analysis flow to call `POST /api/analyze` only after the API behavior above is confirmed.
-5. Use normalized `reviews` as the input for the next AI analysis pipeline step.
+1. Add `.env.local` with `APIFY_API_TOKEN` and `APIFY_PRODUCT_HUNT_ACTOR_ID=feature_map/product-hunt-reviews`, then run `/api/reviews` Product Hunt integration smoke tests.
+2. Debug Product Hunt live extraction inside `actors/product-hunt-reviews`: persist a fetched HTML sample or inspect run logs to determine whether Product Hunt returns client-rendered content, blocked content, or markup the parser does not cover.
+3. Evaluate proxy strategy before enabling proxy by default; avoid `DATACENTER` for this account unless the plan changes.
+4. Decide whether `/api/analyze` should fail hard on scraping errors or fall back to the existing mock dashboard during MVP demos.
+5. Wire frontend analysis flow to call `POST /api/analyze` only after the API behavior above is confirmed.
+6. Use normalized `reviews` as the input for the next AI analysis pipeline step.
