@@ -1,0 +1,36 @@
+{
+  "title": "Product Hunt reviews input",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "start_urls": {
+      "title": "Product Hunt product URLs",
+      "type": "array",
+      "description": "Product Hunt product or reviews URLs. Compatible with the current FeatureMap backend input.",
+      "editor": "requestListSources",
+      "prefill": [
+        {
+          "url": "https://www.producthunt.com/products/claude"
+        }
+      ]
+    },
+    "max_comments": {
+      "title": "Max reviews",
+      "type": "integer",
+      "description": "Maximum number of reviews to return per product. Values above 300 are capped.",
+      "default": 100,
+      "minimum": 1,
+      "maximum": 300
+    },
+    "proxyConfiguration": {
+      "title": "Proxy configuration",
+      "type": "object",
+      "description": "Optional Apify proxy configuration. DATACENTER proxy is used by default when available.",
+      "editor": "proxy",
+      "default": {
+        "useApifyProxy": false
+      }
+    }
+  },
+  "required": ["start_urls"]
+}
