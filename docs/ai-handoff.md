@@ -314,7 +314,7 @@ Local deploy command:
 APIFY_TOKEN=your_apify_token npm run actor:deploy
 ```
 
-`APIFY_API_TOKEN` is also accepted. The GitHub workflow requires an `APIFY_TOKEN` repository secret.
+`APIFY_API_TOKEN` is also accepted. The GitHub workflow accepts either an `APIFY_TOKEN` or `APIFY_API_TOKEN` repository secret.
 
 Apify actor smoke tests:
 

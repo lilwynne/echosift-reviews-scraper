@@ -16,6 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+      APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
       APIFY_PRODUCT_HUNT_ACTOR_ID: feature_map/product-hunt-reviews
     steps:
       - name: Check out repository

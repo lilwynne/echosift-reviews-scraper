@@ -21,7 +21,7 @@ if (!apifyToken) {
 
 function resolveApifyToken() {
   const envToken =
-    process.env.APIFY_TOKEN?.trim() ?? process.env.APIFY_API_TOKEN?.trim();
+    process.env.APIFY_TOKEN?.trim() || process.env.APIFY_API_TOKEN?.trim();
 
   if (envToken) {
     return envToken;
@@ -44,7 +44,8 @@ function run(command, args, options = {}) {
       cwd: options.cwd ?? rootDir,
       env: {
         ...process.env,
-        APIFY_TOKEN: apifyToken
+        APIFY_TOKEN: apifyToken,
+        APIFY_API_TOKEN: apifyToken
       },
       shell: false,
       stdio: "inherit"

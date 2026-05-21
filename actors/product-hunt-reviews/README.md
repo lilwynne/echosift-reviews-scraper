@@ -102,7 +102,7 @@ APIFY_TOKEN=your_apify_token npm run actor:deploy
 
 `APIFY_API_TOKEN` is also accepted. The script runs `npm run actor:test`, then deploys `actors/product-hunt-reviews` to `feature_map/product-hunt-reviews` via Apify CLI. Override the target with `APIFY_PRODUCT_HUNT_ACTOR_ID`; pass `-- --skip-tests` only when tests were already run in the same build.
 
-GitHub Actions can deploy automatically on changes under `actors/product-hunt-reviews/**` after adding an `APIFY_TOKEN` repository secret. The workflow is `.github/workflows/deploy-product-hunt-actor.yml`.
+GitHub Actions can deploy automatically on changes under `actors/product-hunt-reviews/**` after adding an `APIFY_TOKEN` or `APIFY_API_TOKEN` repository secret. The workflow is `.github/workflows/deploy-product-hunt-actor.yml`.
 
 For a local actor-style run, create:
 
