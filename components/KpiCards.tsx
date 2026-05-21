@@ -18,10 +18,10 @@ export function KpiCards({ items }: KpiCardsProps) {
               <item.icon className="h-4 w-4" aria-hidden="true" />
             </div>
           </div>
-          <p className={`text-3xl font-semibold tracking-tight ${item.accent}`}>
+          <p className={`text-3xl font-semibold ${item.accent}`}>
             {item.value}
           </p>
-          <p className="mt-3 text-sm leading-6 text-muted">{item.detail}</p>
+          <p className="mt-3 text-sm leading-7 text-muted">{item.detail}</p>
         </article>
       ))}
     </div>

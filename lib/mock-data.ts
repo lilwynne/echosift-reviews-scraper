@@ -70,28 +70,22 @@ export const trendData = [
 export const localizedContent = {
   "zh-CN": {
     header: {
-      tagline: "用户反馈到功能路线图",
+      tagline: "用户评价分析与竞品调研",
       languageLabel: "选择语言",
       login: "登录",
-      signup: "注册",
-      nav: [
-        { label: "产品", href: "#product" },
-        { label: "场景", href: "#use-cases" },
-        { label: "看板", href: "#dashboard" },
-        { label: "价格", href: "#pricing" }
-      ]
+      signup: "注册"
     },
     hero: {
       badge: "Product Hunt / App Store / Google Play 评价分析",
-      title: "FeatureMap 把用户评价变成清晰的功能地图",
+      title: "FeatureMap 帮你看懂用户评价和竞品反馈",
       description:
-        "粘贴一个产品链接，模拟抓取真实评价，用 AI 汇总情绪、痛点和功能请求，直接生成可执行的迭代路线图。",
+        "粘贴一个产品链接，模拟抓取真实评价，用 AI 汇总情绪、痛点、功能请求和竞品差异，帮助运营人员、小企业主和产品经理快速做判断。",
       placeholder: "在此粘贴 Product Hunt 或商店链接...",
-      button: "生成功能地图",
+      button: "开始分析",
       modelLabel: "分析模型",
       currentModel: "当前模型：",
       previewTitle: "实时洞察预览",
-      previewSubtitle: "从零散评论到优先级路线图",
+      previewSubtitle: "从零散评论到可执行的分析结果",
       sourceHint: "支持 Product Hunt、App Store、Google Play",
       chips: [
         { label: "定价敏感", icon: Flame },
@@ -101,9 +95,9 @@ export const localizedContent = {
     },
     showcase: {
       eyebrow: "像 AI 助手一样轻，像产品系统一样稳",
-      title: "一个入口，覆盖从评价抓取到路线图决策的完整链路",
+      title: "一个入口，覆盖用户评价分析和竞品调研的完整链路",
       description:
-        "FeatureMap 将评价来源、AI 模型、洞察看板和商业转化集中在同一条工作流里，让用户从进入页面到理解价值都更顺畅。",
+        "FeatureMap 将评价来源、AI 模型、洞察看板和竞品对比集中在同一条工作流里，让用户从进入页面到理解价值都更顺畅。",
       platformLabel: "支持的评价来源",
       platforms: ["Product Hunt", "App Store", "Google Play"],
       stats: [
@@ -123,23 +117,23 @@ export const localizedContent = {
           icon: SearchCheck
         },
         {
-          title: "路线图优先级",
-          description: "用提及量、情绪强度和影响面生成行动顺序。",
+          title: "竞品差异对比",
+          description: "把用户反馈和竞品表现放在一起，快速看出差异和机会点。",
           icon: Route
         }
       ]
     },
     loading: {
-      title: "正在生成 FeatureMap",
+      title: "正在分析评价",
       messages: [
         "正在调取 Apify 接口抓取评价...",
         "正在使用大模型进行情感降噪...",
-        "正在生成结构化功能地图..."
+        "正在整理结构化分析结果..."
       ]
     },
     dashboard: {
       complete: "分析完成",
-      title: "FeatureMap 用户反馈路线图",
+      title: "FeatureMap 用户评价分析结果",
       sourceLabel: "数据源",
       modelLabel: "模型",
       reset: "重新分析"
@@ -264,26 +258,26 @@ export const localizedContent = {
     },
     useCases: {
       eyebrow: "为高频产品决策场景而设计",
-      title: "独立开发者、PM 和增长团队可以在同一张地图上对齐",
+      title: "运营人员、小企业主和产品经理可以在同一页面上对齐",
       description:
-        "FeatureMap 面向多角色产品协作，把不同团队成员关心的评论证据、需求主题和下一步动作组织到一起。",
+        "FeatureMap 面向多角色协作，把评价证据、需求主题和竞品信息组织到一起，方便快速决策。",
       personas: [
         {
-          role: "独立开发者",
-          title: "快速找出下一个最值得做的功能",
-          description: "不用逐条读评论，直接看到高频请求和阻塞转化的体验问题。",
+          role: "小企业主",
+          title: "快速判断用户最在意什么",
+          description: "不用逐条读评论，直接看到高频请求、吐槽点和转化阻力。",
           icon: Users
         },
         {
           role: "产品经理",
-          title: "把用户原话转成路线图依据",
-          description: "每张卡片都保留提及量和证据入口，方便写 PRD 和排优先级。",
+          title: "把用户原话转成分析依据",
+          description: "每张卡片都保留提及量和证据入口，方便写 PRD 和做判断。",
           icon: Route
         },
         {
-          role: "增长与客服",
-          title: "识别影响口碑和付费的关键摩擦",
-          description: "用情绪趋势和痛点标签判断哪些问题会影响留存、推荐和升级。",
+          role: "运营人员",
+          title: "识别影响口碑和转化的关键摩擦",
+          description: "用情绪趋势和痛点标签判断哪些问题会影响留存、推荐和成交。",
           icon: ShieldCheck
         }
       ]
@@ -304,7 +298,7 @@ export const localizedContent = {
     },
     subscription: {
       eyebrow: "订阅早期访问",
-      title: "每周收到一份真实产品反馈洞察样例",
+      title: "每周收到一份真实产品评价洞察样例",
       description:
         "留下邮箱，我们会发送 MVP 进展、示例报告和可复用的评价分析模板。",
       placeholder: "you@example.com",
@@ -316,28 +310,22 @@ export const localizedContent = {
   },
   "zh-TW": {
     header: {
-      tagline: "使用者回饋到功能路線圖",
+      tagline: "使用者評價分析與競品調研",
       languageLabel: "選擇語言",
       login: "登入",
-      signup: "註冊",
-      nav: [
-        { label: "產品", href: "#product" },
-        { label: "場景", href: "#use-cases" },
-        { label: "看板", href: "#dashboard" },
-        { label: "價格", href: "#pricing" }
-      ]
+      signup: "註冊"
     },
     hero: {
       badge: "Product Hunt / App Store / Google Play 評價分析",
-      title: "FeatureMap 把使用者評價變成清晰的功能地圖",
+      title: "FeatureMap 幫你看懂使用者評價和競品回饋",
       description:
-        "貼上一個產品連結，模擬抓取真實評價，用 AI 彙整情緒、痛點和功能請求，直接產生可執行的迭代路線圖。",
+        "貼上一個產品連結，模擬抓取真實評價，用 AI 彙整情緒、痛點、功能請求和競品差異，幫助營運人員、小企業主和產品經理快速做判斷。",
       placeholder: "在此貼上 Product Hunt 或商店連結...",
-      button: "產生功能地圖",
+      button: "開始分析",
       modelLabel: "分析模型",
       currentModel: "目前模型：",
       previewTitle: "即時洞察預覽",
-      previewSubtitle: "從零散評論到優先級路線圖",
+      previewSubtitle: "從零散評論到可執行的分析結果",
       sourceHint: "支援 Product Hunt、App Store、Google Play",
       chips: [
         { label: "定價敏感", icon: Flame },
@@ -347,9 +335,9 @@ export const localizedContent = {
     },
     showcase: {
       eyebrow: "像 AI 助手一樣輕，像產品系統一樣穩",
-      title: "一個入口，覆蓋從評價抓取到路線圖決策的完整鏈路",
+      title: "一個入口，覆蓋使用者評價分析和競品調研的完整鏈路",
       description:
-        "FeatureMap 將評價來源、AI 模型、洞察看板和商業轉化集中在同一條工作流裡，讓使用者從進入頁面到理解價值都更順暢。",
+        "FeatureMap 將評價來源、AI 模型、洞察看板和競品對比集中在同一條工作流裡，讓使用者從進入頁面到理解價值都更順暢。",
       platformLabel: "支援的評價來源",
       platforms: ["Product Hunt", "App Store", "Google Play"],
       stats: [
@@ -369,23 +357,23 @@ export const localizedContent = {
           icon: SearchCheck
         },
         {
-          title: "路線圖優先級",
-          description: "用提及量、情緒強度和影響面產生行動順序。",
+          title: "競品差異對比",
+          description: "把使用者回饋和競品表現放在一起，快速看出差異和機會點。",
           icon: Route
         }
       ]
     },
     loading: {
-      title: "正在產生 FeatureMap",
+      title: "正在分析評價",
       messages: [
         "正在調取 Apify 介面抓取評價...",
         "正在使用大模型進行情緒降噪...",
-        "正在產生結構化功能地圖..."
+        "正在整理結構化分析結果..."
       ]
     },
     dashboard: {
       complete: "分析完成",
-      title: "FeatureMap 使用者回饋路線圖",
+      title: "FeatureMap 使用者評價分析結果",
       sourceLabel: "資料來源",
       modelLabel: "模型",
       reset: "重新分析"
@@ -510,26 +498,26 @@ export const localizedContent = {
     },
     useCases: {
       eyebrow: "為高頻產品決策場景而設計",
-      title: "獨立開發者、PM 和成長團隊可以在同一張地圖上對齊",
+      title: "營運人員、小企業主和產品經理可以在同一頁上對齊",
       description:
-        "FeatureMap 面向多角色產品協作，把不同團隊成員關心的評論證據、需求主題和下一步動作組織到一起。",
+        "FeatureMap 面向多角色協作，把評價證據、需求主題和競品資訊組織到一起，方便快速決策。",
       personas: [
         {
-          role: "獨立開發者",
-          title: "快速找出下一個最值得做的功能",
-          description: "不用逐條讀評論，直接看到高頻請求和阻塞轉化的體驗問題。",
+          role: "小企業主",
+          title: "快速判斷使用者最在意什麼",
+          description: "不用逐條讀評論，直接看到高頻請求、吐槽點和轉化阻力。",
           icon: Users
         },
         {
           role: "產品經理",
-          title: "把使用者原話轉成路線圖依據",
-          description: "每張卡片都保留提及量和證據入口，方便寫 PRD 和排優先級。",
+          title: "把使用者原話轉成分析依據",
+          description: "每張卡片都保留提及量和證據入口，方便寫 PRD 和做判斷。",
           icon: Route
         },
         {
-          role: "成長與客服",
-          title: "識別影響口碑和付費的關鍵摩擦",
-          description: "用情緒趨勢和痛點標籤判斷哪些問題會影響留存、推薦和升級。",
+          role: "營運人員",
+          title: "識別影響口碑和轉化的關鍵摩擦",
+          description: "用情緒趨勢和痛點標籤判斷哪些問題會影響留存、推薦和成交。",
           icon: ShieldCheck
         }
       ]
@@ -550,7 +538,7 @@ export const localizedContent = {
     },
     subscription: {
       eyebrow: "訂閱早期存取",
-      title: "每週收到一份真實產品回饋洞察範例",
+      title: "每週收到一份真實產品評價洞察樣例",
       description:
         "留下信箱，我們會發送 MVP 進展、範例報告和可複用的評價分析模板。",
       placeholder: "you@example.com",
@@ -562,28 +550,22 @@ export const localizedContent = {
   },
   en: {
     header: {
-      tagline: "Feedback into feature roadmaps",
+      tagline: "Review analysis and competitor research",
       languageLabel: "Select language",
       login: "Log in",
-      signup: "Sign up",
-      nav: [
-        { label: "Product", href: "#product" },
-        { label: "Use cases", href: "#use-cases" },
-        { label: "Dashboard", href: "#dashboard" },
-        { label: "Pricing", href: "#pricing" }
-      ]
+      signup: "Sign up"
     },
     hero: {
       badge: "Product Hunt / App Store / Google Play review analysis",
-      title: "FeatureMap turns user reviews into a clear feature map",
+      title: "FeatureMap turns user reviews into clear insights",
       description:
-        "Paste one product link, simulate review collection, and let AI summarize sentiment, pain points, and feature requests into an actionable roadmap.",
+        "Paste one product link, simulate review collection, and let AI summarize sentiment, pain points, feature requests, and competitor differences for faster decisions.",
       placeholder: "Paste a Product Hunt or store link here...",
-      button: "Generate feature map",
+      button: "Start analysis",
       modelLabel: "Analysis model",
       currentModel: "Current model: ",
       previewTitle: "Live insight preview",
-      previewSubtitle: "From scattered comments to a prioritized roadmap",
+      previewSubtitle: "From scattered comments to an actionable analysis result",
       sourceHint: "Supports Product Hunt, App Store, and Google Play",
       chips: [
         { label: "Pricing sensitivity", icon: Flame },
@@ -593,9 +575,9 @@ export const localizedContent = {
     },
     showcase: {
       eyebrow: "Light like an AI assistant, structured like a product system",
-      title: "One workflow from review collection to roadmap decisions",
+      title: "One workflow from review collection to competitor-aware insights",
       description:
-        "FeatureMap brings review sources, AI models, dashboards, and commercial conversion into one focused flow so visitors understand the product value faster.",
+        "FeatureMap brings review sources, AI models, dashboards, and competitor comparison into one focused flow so visitors understand the product value faster.",
       platformLabel: "Supported review sources",
       platforms: ["Product Hunt", "App Store", "Google Play"],
       stats: [
@@ -615,23 +597,23 @@ export const localizedContent = {
           icon: SearchCheck
         },
         {
-          title: "Roadmap priority mapping",
-          description: "Rank next actions by mentions, sentiment intensity, and user impact.",
+          title: "Competitor difference analysis",
+          description: "Compare user feedback with competitor performance to spot gaps and opportunities.",
           icon: Route
         }
       ]
     },
     loading: {
-      title: "Generating FeatureMap",
+      title: "Analyzing reviews",
       messages: [
         "Fetching reviews through the Apify pipeline...",
         "Denoising sentiment with the selected model...",
-        "Generating the structured feature map..."
+        "Organizing the structured analysis result..."
       ]
     },
     dashboard: {
       complete: "Analysis complete",
-      title: "FeatureMap User Feedback Roadmap",
+      title: "FeatureMap user review analysis result",
       sourceLabel: "Source",
       modelLabel: "Model",
       reset: "Run again"
@@ -760,29 +742,26 @@ export const localizedContent = {
     },
     useCases: {
       eyebrow: "Designed for high-frequency product decisions",
-      title: "Indie makers, PMs, and growth teams align on the same map",
+      title: "Operators, small business owners, and PMs align in one place",
       description:
-        "FeatureMap is designed for multi-role product collaboration, organizing review evidence, demand themes, and next actions for different teammates.",
+        "FeatureMap is designed for multi-role collaboration, organizing review evidence, demand themes, and competitor information for faster decisions.",
       personas: [
         {
-          role: "Indie maker",
-          title: "Find the next feature worth shipping",
-          description:
-            "Skip manual review reading and see the requests and UX blockers that matter most.",
+          role: "Small business owner",
+          title: "Quickly see what users care about most",
+          description: "Skip manual review reading and focus on high-frequency requests, complaints, and conversion blockers.",
           icon: Users
         },
         {
           role: "Product manager",
-          title: "Turn user quotes into roadmap evidence",
-          description:
-            "Every card preserves mention volume and evidence access for PRDs and prioritization.",
+          title: "Turn user quotes into analysis evidence",
+          description: "Every card preserves mention volume and evidence access for PRDs and decisions.",
           icon: Route
         },
         {
-          role: "Growth & support",
-          title: "Spot reputation and upgrade friction",
-          description:
-            "Use sentiment trends and pain-point tags to protect retention, referrals, and upgrades.",
+          role: "Operator",
+          title: "Spot reputation and conversion friction",
+          description: "Use sentiment trends and pain-point tags to protect retention, referrals, and sales.",
           icon: ShieldCheck
         }
       ]
@@ -803,14 +782,14 @@ export const localizedContent = {
     },
     subscription: {
       eyebrow: "Subscribe for early access",
-      title: "Get one real product-feedback insight sample every week",
+      title: "Get one real product-review insight sample every week",
       description:
         "Leave your email to receive MVP updates, sample reports, and reusable review-analysis templates.",
       placeholder: "you@example.com",
       button: "Subscribe",
       success: "You are on the list. The next report will reach you first.",
       privacy: "No spam. Unsubscribe anytime.",
-      benefits: ["Sample insight reports", "New model previews", "Roadmap templates"]
+      benefits: ["Sample insight reports", "New model previews", "Analysis templates"]
     }
   }
 };

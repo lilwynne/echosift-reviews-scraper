@@ -20,7 +20,7 @@ export function LoadingState({ step, content }: LoadingStateProps) {
             <Loader2 className="relative h-8 w-8 animate-spin text-cyan-200" />
           </div>
           <h2 className="text-xl font-semibold text-ink">{content.title}</h2>
-          <p className="mt-2 min-h-6 text-sm font-medium text-cyan-200">
+          <p className="mt-2 min-h-6 text-sm font-medium leading-7 text-cyan-200">
             {content.messages[activeStep]}
           </p>
         </div>
@@ -52,7 +52,7 @@ export function LoadingState({ step, content }: LoadingStateProps) {
                     }`}
                   />
                 </div>
-                <p className="text-sm font-medium text-ink">{message}</p>
+                <p className="text-sm font-medium leading-7 text-ink">{message}</p>
               </div>
             );
           })}

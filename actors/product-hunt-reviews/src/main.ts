@@ -9,6 +9,7 @@ import {
 async function main() {
   const input = (await getInput<ActorInput>()) ?? {};
   const urls = getInputUrls(input);
+  let metadataWarningLogged = false;
 
   if (urls.length === 0) {
     throw new Error("Input must include at least one Product Hunt product URL.");
@@ -18,8 +19,17 @@ async function main() {
     log.info("Scraping Product Hunt reviews", { sourceUrl });
 
     const result = await scrapeProductHuntReviews(sourceUrl, input, {
-      productHuntApiToken: process.env.PRODUCT_HUNT_API_TOKEN
+      productHuntApiToken: input.productHuntApiToken
     });
+
+    if (result.metadataWarning && !metadataWarningLogged) {
+      log.warning("Product Hunt metadata enrichment skipped", {
+        sourceUrl,
+        message: result.metadataWarning
+      });
+      metadataWarningLogged = true;
+    }
+
     const items =
       result.reviews.length > 0
         ? result.reviews
@@ -34,6 +44,13 @@ async function main() {
           ];
 
     await pushData(items);
+    for (const warning of result.scrapeWarnings) {
+      log.warning("Product Hunt review scrape warning", {
+        sourceUrl,
+        message: warning
+      });
+    }
+
     log.info("Finished Product Hunt reviews scrape", {
       sourceUrl,
       count: result.reviews.length,

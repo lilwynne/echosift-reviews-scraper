@@ -2,7 +2,7 @@
 
 ## Summary
 
-This PR expands FeatureMap's review-ingestion backend beyond Product Hunt. Product Hunt still uses Apify and now has a self-built actor scaffold/deployment, while Apple App Store uses Apple's public RSS feed and Google Play uses `google-play-scraper`.
+This PR expands FeatureMap's review-ingestion backend beyond Product Hunt and then moves Product Hunt ingestion from Apify to the official Product Hunt API v2 GraphQL endpoint. Apple App Store uses Apple's public RSS feed and Google Play uses `google-play-scraper`.
 
 The approved frontend UI was intentionally left unchanged.
 
@@ -11,25 +11,29 @@ The approved frontend UI was intentionally left unchanged.
 - Updated `lib/apify-reviews.ts`
   - Keeps the public `fetchReviews(url)` API.
   - Detects Product Hunt, App Store, and Google Play links.
-  - Keeps Product Hunt on Apify with actor override support.
+  - Parses Product Hunt `/products/{slug}` URLs and calls official GraphQL `post(slug:)`.
+  - Fetches Product Hunt product metadata and paginated comments via `comments(first:, after:, order: NEWEST)`.
+  - Follows `pageInfo.hasNextPage` / `pageInfo.endCursor` until comments are exhausted or `REVIEWS_MAX_REVIEWS` is reached.
   - Fetches App Store reviews from Apple RSS with app id and country parsing.
   - Fetches Google Play reviews with `google-play-scraper`.
   - Normalizes all sources into `NormalizedReview[]`.
-  - Adds `provider` and makes `actorId` Product Hunt-specific.
+  - Adds `provider`, with Product Hunt now returning `product-hunt-graphql`.
   - Adds generic review fetch errors for timeout/network/failure cases.
 
 - Updated `lib/api-errors.ts`
   - Maps new generic review error codes to HTTP 502/504 responses.
+  - Maps missing Product Hunt Developer Token to HTTP 500.
 
 - Updated `scripts/test-reviews.mjs`
   - Defaults to an App Store link so the test script no longer requires Apify credentials unless a Product Hunt URL is provided.
 
 - Added `actors/product-hunt-reviews`
-  - Self-built Product Hunt reviews Apify actor using Node/TypeScript and HTTP/HTML parsing.
+  - Self-built Product Hunt reviews Apify actor using Node/TypeScript, raw fetch plus Playwright fallback, and structured-data parsing.
   - Compatible with the backend's existing Product Hunt actor input shape.
   - Deployed privately as `feature_map/product-hunt-reviews` (`xHkiWaZEikt9m0kBy`).
-  - Defaults proxy usage off because this Apify account cannot access `DATACENTER`.
+  - Uses explicit Product Hunt proxy configuration from backend env and reports when proxy is missing or still challenged.
   - Uses Apify cloud env vars `ACTOR_DEFAULT_KEY_VALUE_STORE_ID`, `ACTOR_INPUT_KEY`, and `ACTOR_DEFAULT_DATASET_ID` for input/output storage.
+  - This actor is now legacy/fallback reference code; backend Product Hunt ingestion no longer calls it.
 
 - Updated dependencies
   - Added `google-play-scraper`.
@@ -44,9 +48,7 @@ The approved frontend UI was intentionally left unchanged.
 Product Hunt only:
 
 ```env
-APIFY_API_TOKEN=your_apify_api_token
-APIFY_PRODUCT_HUNT_ACTOR_ID=feature_map/product-hunt-reviews
-APIFY_RUN_TIMEOUT_SECS=120
+PRODUCT_HUNT_API_TOKEN=your_product_hunt_developer_token
 ```
 
 All sources:
@@ -78,11 +80,30 @@ Successful response shape:
 ```json
 {
   "ok": true,
-  "source": "app-store",
-  "sourceUrl": "https://apps.apple.com/us/app/facebook/id284882215",
-  "provider": "apple-rss",
-  "count": 0,
-  "reviews": [],
+  "source": "product-hunt",
+  "sourceUrl": "https://www.producthunt.com/products/example-product",
+  "provider": "product-hunt-graphql",
+  "product": {
+    "source": "product-hunt",
+    "sourceUrl": "https://www.producthunt.com/products/example-product",
+    "name": "Example Product",
+    "slug": "example-product",
+    "tagline": "Example tagline",
+    "votesCount": 123
+  },
+  "count": 1,
+  "reviews": [
+    {
+      "source": "product-hunt",
+      "sourceUrl": "https://www.producthunt.com/products/example-product",
+      "productName": "Example Product",
+      "text": "Useful product.",
+      "author": "Ada Example",
+      "authorUsername": "ada",
+      "date": "2026-05-03T00:00:00Z",
+      "votes": 7
+    }
+  ],
   "rawItems": []
 }
 ```
@@ -99,12 +120,11 @@ Successful response shape:
 
 ## Testing
 
-Passed:
+Passed locally:
 
 ```bash
-npm run lint
+npm run test:apify-reviews
 npm run build
-npm run actor:test
 ```
 
 Build output includes:
@@ -118,15 +138,13 @@ Smoke-test notes:
 
 - App Store local API route returned 200 JSON, but Apple RSS returned an empty feed for tested app/country combinations in this environment.
 - Google Play local API route returned a friendly error when Google Play timed out from this environment.
-- Product Hunt self-built actor was deployed successfully to Apify, build `0.1.3 / latest`.
-- Product Hunt actor now starts and reads input in Apify cloud.
-- Product Hunt live smoke test against `https://www.producthunt.com/products/claude` returned `SCRAPE_EMPTY_OR_BLOCKED` with zero reviews.
-- Product Hunt proxy smoke test using account group `BUYPROXIES94952` returned `fetch failed` for Product Hunt pages.
+- Product Hunt GraphQL helper tests cover bearer-token usage, URL slug parsing, comment normalization, and cursor pagination.
+- Live Product Hunt GraphQL validation still needs to be run with the user's real Developer Token.
 
 ## Risks / Follow-Ups
 
-- Product Hunt actor deployment is complete, but real Product Hunt review extraction is not yet validated. The next step is to inspect live fetched HTML/run logs and adjust parser/proxy strategy.
-- Do not default the actor to `DATACENTER` proxy for this account; it is not available.
+- Live Product Hunt validation still needs to be rerun with a valid `PRODUCT_HUNT_API_TOKEN`.
+- The legacy Apify actor remains in the repo; remove it later if the GraphQL flow is sufficient in production.
 - Apple RSS can return empty feeds for some app/country combinations.
 - Google Play scraping is unofficial and may fail when Google changes markup or blocks the runtime network.
 - `/api/analyze` currently fails if scraping fails. For MVP demos, consider whether it should fall back to mock dashboard data.

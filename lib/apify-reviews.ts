@@ -10,17 +10,36 @@ export type NormalizedReview = {
   title?: string;
   text: string;
   author?: string;
+  authorUsername?: string;
   rating?: number;
   date?: string;
   votes?: number;
+};
+
+export type NormalizedProduct = {
+  id?: string;
+  source: ReviewSource;
+  sourceUrl?: string;
+  name?: string;
+  slug?: string;
+  tagline?: string;
+  url?: string;
+  website?: string;
+  commentsCount?: number;
+  reviewsCount?: number;
+  reviewsRating?: number;
+  votesCount?: number;
+  createdAt?: string;
+  featuredAt?: string;
 };
 
 export type FetchReviewsSuccess = {
   ok: true;
   source: ReviewSource;
   sourceUrl: string;
-  provider: "apify" | "apple-rss" | "google-play-scraper";
+  provider: "product-hunt-graphql" | "apple-rss" | "google-play-scraper";
   actorId?: string;
+  product?: NormalizedProduct;
   count: number;
   reviews: NormalizedReview[];
   rawItems: unknown[];
@@ -38,9 +57,9 @@ export type FetchReviewsResult = FetchReviewsSuccess | FetchReviewsFailure;
 
 type ProductHuntConfig = {
   source: "product-hunt";
-  provider: "apify";
-  actorId: string;
-  input: Record<string, unknown>;
+  provider: "product-hunt-graphql";
+  slug: string;
+  productUrl: string;
 };
 
 type AppStoreConfig = {
@@ -61,13 +80,98 @@ type GooglePlayConfig = {
 type SourceConfig = ProductHuntConfig | AppStoreConfig | GooglePlayConfig;
 type JsonRecord = Record<string, unknown>;
 
-const DEFAULT_PRODUCT_HUNT_ACTOR_ID = "vulnv~producthunt-scraper";
 const DEFAULT_MAX_REVIEWS = 100;
 const DEFAULT_REQUEST_TIMEOUT_MS = 120_000;
-const DEFAULT_RUN_TIMEOUT_SECS = 120;
-const APIFY_MAX_SYNC_TIMEOUT_SECS = 300;
 const APP_STORE_PAGE_SIZE = 50;
 const APP_STORE_MAX_PAGES = 10;
+const PRODUCT_HUNT_GRAPHQL_ENDPOINT =
+  "https://api.producthunt.com/v2/api/graphql";
+const PRODUCT_HUNT_COMMENTS_PAGE_SIZE = 50;
+
+type ProductHuntGraphqlUser = {
+  username?: string;
+  name?: string;
+};
+
+type ProductHuntGraphqlComment = {
+  id?: string;
+  body?: string;
+  createdAt?: string;
+  url?: string;
+  votesCount?: number;
+  user?: ProductHuntGraphqlUser | null;
+};
+
+type ProductHuntPageInfo = {
+  hasNextPage?: boolean;
+  endCursor?: string | null;
+};
+
+type ProductHuntGraphqlPost = {
+  id?: string;
+  name?: string;
+  slug?: string;
+  tagline?: string;
+  url?: string;
+  website?: string;
+  commentsCount?: number;
+  reviewsCount?: number;
+  reviewsRating?: number;
+  votesCount?: number;
+  createdAt?: string;
+  featuredAt?: string;
+  comments?: {
+    nodes?: ProductHuntGraphqlComment[];
+    pageInfo?: ProductHuntPageInfo;
+    totalCount?: number;
+  };
+};
+
+type ProductHuntGraphqlPayload = {
+  data?: {
+    post?: ProductHuntGraphqlPost | null;
+  };
+  errors?: Array<{
+    message?: string;
+  }>;
+};
+
+const PRODUCT_HUNT_POST_COMMENTS_QUERY = `
+  query ProductHuntPostComments($slug: String!, $first: Int!, $after: String) {
+    post(slug: $slug) {
+      id
+      name
+      slug
+      tagline
+      url
+      website
+      commentsCount
+      reviewsCount
+      reviewsRating
+      votesCount
+      createdAt
+      featuredAt
+      comments(first: $first, after: $after, order: NEWEST) {
+        nodes {
+          id
+          body
+          createdAt
+          url
+          votesCount
+          user {
+            username
+            name
+          }
+        }
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        totalCount
+      }
+    }
+  }
+`;
 
 function getPositiveIntegerEnv(name: string, fallback: number) {
   const value = Number.parseInt(process.env[name] ?? "", 10);
@@ -88,15 +192,8 @@ function getRequestTimeoutMs() {
   );
 }
 
-function getRunTimeoutSecs() {
-  return Math.min(
-    getPositiveIntegerEnv("APIFY_RUN_TIMEOUT_SECS", DEFAULT_RUN_TIMEOUT_SECS),
-    APIFY_MAX_SYNC_TIMEOUT_SECS
-  );
-}
-
-function normalizeActorId(actorId: string) {
-  return actorId.trim().replace("/", "~");
+function getProductHuntApiToken() {
+  return process.env.PRODUCT_HUNT_API_TOKEN?.trim() || undefined;
 }
 
 function isRecord(value: unknown): value is JsonRecord {
@@ -241,6 +338,14 @@ function normalizeLocalePart(value: string | null, fallback: string) {
   return value?.trim().toLowerCase() || fallback;
 }
 
+function getProductHuntSlug(parsedUrl: URL) {
+  const pathParts = parsedUrl.pathname.split("/").filter(Boolean);
+  const productsIndex = pathParts.findIndex((part) => part === "products");
+  const slug = productsIndex >= 0 ? pathParts[productsIndex + 1] : undefined;
+
+  return slug?.trim() || undefined;
+}
+
 function getSourceConfig(url: string): SourceConfig | FetchReviewsFailure {
   let parsedUrl: URL;
 
@@ -255,25 +360,21 @@ function getSourceConfig(url: string): SourceConfig | FetchReviewsFailure {
   }
 
   const hostname = parsedUrl.hostname.toLowerCase();
-  const maxReviews = getMaxReviews();
 
   if (hostname === "producthunt.com" || hostname.endsWith(".producthunt.com")) {
-    const actorId = normalizeActorId(
-      process.env.APIFY_PRODUCT_HUNT_ACTOR_ID ?? DEFAULT_PRODUCT_HUNT_ACTOR_ID
-    );
+    const slug = getProductHuntSlug(parsedUrl);
+
+    if (!slug) {
+      return reviewFetchFailedFailure(
+        "Product Hunt 链接中没有找到产品 slug，请使用 /products/{slug} 格式的链接。"
+      );
+    }
 
     return {
       source: "product-hunt",
-      provider: "apify",
-      actorId,
-      input: {
-        start_urls: [{ url }],
-        max_products: 1,
-        max_comments: maxReviews,
-        scrape_comments: true,
-        scrape_products: true,
-        scrape_users: false
-      }
+      provider: "product-hunt-graphql",
+      slug,
+      productUrl: `https://www.producthunt.com/products/${slug}`
     };
   }
 
@@ -311,69 +412,58 @@ function getSourceConfig(url: string): SourceConfig | FetchReviewsFailure {
   return unsupportedSourceFailure();
 }
 
-function getProductHuntReview(
-  item: JsonRecord,
-  parent?: JsonRecord
+function normalizeProductHuntProduct(
+  post: ProductHuntGraphqlPost,
+  productUrl: string
+): NormalizedProduct {
+  return {
+    id: post.id,
+    source: "product-hunt",
+    sourceUrl: productUrl,
+    name: post.name,
+    slug: post.slug,
+    tagline: post.tagline,
+    url: post.url,
+    website: post.website,
+    commentsCount: post.commentsCount,
+    reviewsCount: post.reviewsCount,
+    reviewsRating: post.reviewsRating,
+    votesCount: post.votesCount,
+    createdAt: post.createdAt,
+    featuredAt: post.featuredAt
+  };
+}
+
+function getProductHuntGraphqlReview(
+  comment: ProductHuntGraphqlComment,
+  product: NormalizedProduct | undefined
 ): NormalizedReview | null {
-  const htmlText = textFromHtml(stringFrom(item, ["body_html", "html"]));
-  const text =
-    stringFrom(item, ["body", "text", "comment", "content", "review"]) ??
-    htmlText;
+  const text = textFromHtml(comment.body) ?? comment.body?.trim();
 
   if (!text) {
     return null;
   }
 
   return {
-    id: stringFrom(item, ["id", "comment_id", "commentId"]),
+    id: comment.id,
     source: "product-hunt",
-    sourceUrl:
-      stringFrom(item, ["product_url", "productUrl", "url"]) ??
-      (parent ? stringFrom(parent, ["product_url", "productUrl", "url"]) : undefined),
-    productName:
-      stringFrom(item, ["product_name", "productName", "product"]) ??
-      (parent
-        ? stringFrom(parent, ["name", "product_name", "productName"])
-        : undefined),
+    sourceUrl: comment.url ?? product?.sourceUrl,
+    productName: product?.name,
     text,
-    author:
-      nestedStringFrom(item, "user", ["name", "username"]) ??
-      stringFrom(item, ["author", "username", "user_name", "userName"]),
-    date: stringFrom(item, ["created_at", "createdAt", "date", "publishedAt"]),
-    votes: numberFrom(item, ["vote_count", "voteCount", "votes", "upvotes"])
+    author: comment.user?.name ?? comment.user?.username,
+    authorUsername: comment.user?.username,
+    date: comment.createdAt,
+    votes: comment.votesCount
   };
 }
 
-function normalizeProductHuntReviews(rawItems: unknown[]) {
-  const reviews: NormalizedReview[] = [];
-
-  for (const rawItem of rawItems) {
-    if (!isRecord(rawItem)) {
-      continue;
-    }
-
-    const comments = rawItem.comments;
-
-    if (Array.isArray(comments)) {
-      for (const comment of comments) {
-        if (isRecord(comment)) {
-          const review = getProductHuntReview(comment, rawItem);
-
-          if (review) {
-            reviews.push(review);
-          }
-        }
-      }
-    }
-
-    const review = getProductHuntReview(rawItem);
-
-    if (review) {
-      reviews.push(review);
-    }
-  }
-
-  return reviews;
+function normalizeProductHuntGraphqlReviews(
+  comments: ProductHuntGraphqlComment[],
+  product: NormalizedProduct | undefined
+) {
+  return comments
+    .map((comment) => getProductHuntGraphqlReview(comment, product))
+    .filter((review): review is NormalizedReview => Boolean(review));
 }
 
 function getRssLabel(value: unknown) {
@@ -475,7 +565,7 @@ function normalizeGooglePlayReviews(rawItems: unknown[]) {
   return reviews;
 }
 
-async function readApifyError(response: Response) {
+async function readJsonError(response: Response) {
   try {
     const payload = await response.json();
 
@@ -507,70 +597,130 @@ async function fetchWithTimeout(url: URL | string, init?: RequestInit) {
   }
 }
 
+async function fetchProductHuntGraphqlPage(
+  sourceConfig: ProductHuntConfig,
+  first: number,
+  after: string | null
+) {
+  const productHuntApiToken = getProductHuntApiToken();
+
+  if (!productHuntApiToken) {
+    throw new Error("MISSING_PRODUCT_HUNT_API_TOKEN");
+  }
+
+  const response = await fetchWithTimeout(PRODUCT_HUNT_GRAPHQL_ENDPOINT, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${productHuntApiToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      query: PRODUCT_HUNT_POST_COMMENTS_QUERY,
+      variables: {
+        slug: sourceConfig.slug,
+        first,
+        after
+      }
+    })
+  });
+
+  if (!response.ok) {
+    const message = await readJsonError(response);
+    throw new Error(
+      message ?? `Product Hunt GraphQL request failed with HTTP ${response.status}.`
+    );
+  }
+
+  const payload = (await response.json()) as ProductHuntGraphqlPayload;
+
+  if (payload.errors?.length) {
+    throw new Error(
+      payload.errors[0]?.message ??
+        "Product Hunt GraphQL request returned GraphQL errors."
+    );
+  }
+
+  return payload;
+}
+
 async function fetchProductHuntReviews(
   url: string,
   sourceConfig: ProductHuntConfig
 ): Promise<FetchReviewsResult> {
-  const token = process.env.APIFY_API_TOKEN?.trim();
-
-  if (!token) {
+  if (!getProductHuntApiToken()) {
     return {
       ok: false,
       error: {
-        code: "MISSING_APIFY_API_TOKEN",
-        message: "缺少 APIFY_API_TOKEN，请先在 .env.local 中配置 Apify API Token。"
+        code: "MISSING_PRODUCT_HUNT_API_TOKEN",
+        message:
+          "缺少 PRODUCT_HUNT_API_TOKEN，请先在 .env.local 中配置 Product Hunt Developer Token。"
       }
     };
   }
 
-  const runTimeoutSecs = getRunTimeoutSecs();
-  const endpoint = new URL(
-    `https://api.apify.com/v2/acts/${sourceConfig.actorId}/run-sync-get-dataset-items`
-  );
-
-  endpoint.searchParams.set("format", "json");
-  endpoint.searchParams.set("clean", "true");
-  endpoint.searchParams.set("timeout", String(runTimeoutSecs));
+  const maxReviews = getMaxReviews();
+  const first = Math.min(PRODUCT_HUNT_COMMENTS_PAGE_SIZE, maxReviews);
+  const rawItems: unknown[] = [];
+  const comments: ProductHuntGraphqlComment[] = [];
+  let product: NormalizedProduct | undefined;
+  let after: string | null = null;
 
   try {
-    const response = await fetchWithTimeout(endpoint, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(sourceConfig.input)
-    });
+    do {
+      const page = await fetchProductHuntGraphqlPage(sourceConfig, first, after);
+      const post = page.data?.post;
 
-    if (!response.ok) {
-      const apifyMessage = await readApifyError(response);
+      rawItems.push(page);
 
-      return {
-        ok: false,
-        error: {
-          code: "APIFY_REQUEST_FAILED",
-          message:
-            apifyMessage ??
-            "Apify 抓取请求失败，请检查 Actor 配置或稍后重试。"
-        }
-      };
-    }
+      if (!post) {
+        return reviewFetchFailedFailure(
+          "Product Hunt GraphQL 没有找到这个产品，请检查链接中的 slug。"
+        );
+      }
 
-    const payload = await response.json();
-    const rawItems = Array.isArray(payload) ? payload : [];
-    const reviews = normalizeProductHuntReviews(rawItems).slice(0, getMaxReviews());
+      if (!product) {
+        product = normalizeProductHuntProduct(post, sourceConfig.productUrl);
+      }
+
+      const pageComments = post.comments?.nodes ?? [];
+      comments.push(...pageComments);
+
+      const pageInfo = post.comments?.pageInfo;
+      after = pageInfo?.hasNextPage ? pageInfo.endCursor ?? null : null;
+
+      if (pageComments.length === 0) {
+        break;
+      }
+    } while (after && comments.length < maxReviews);
+
+    const reviews = normalizeProductHuntGraphqlReviews(
+      comments.slice(0, maxReviews),
+      product
+    );
 
     return {
       ok: true,
       source: sourceConfig.source,
       sourceUrl: url,
       provider: sourceConfig.provider,
-      actorId: sourceConfig.actorId,
+      product,
       count: reviews.length,
       reviews,
       rawItems
     };
   } catch (error) {
+    if (error instanceof Error && error.message === "MISSING_PRODUCT_HUNT_API_TOKEN") {
+      return {
+        ok: false,
+        error: {
+          code: "MISSING_PRODUCT_HUNT_API_TOKEN",
+          message:
+            "缺少 PRODUCT_HUNT_API_TOKEN，请先在 .env.local 中配置 Product Hunt Developer Token。"
+        }
+      };
+    }
+
     return friendlyNetworkError(error);
   }
 }

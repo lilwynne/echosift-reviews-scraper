@@ -13,10 +13,10 @@ export function ProductShowcase({ content }: ProductShowcaseProps) {
             <p className="text-sm font-semibold text-cyan-200">
               {content.eyebrow}
             </p>
-            <h2 className="mt-3 text-3xl font-semibold tracking-tight text-ink">
+            <h2 className="mt-3 text-3xl font-semibold text-ink">
               {content.title}
             </h2>
-            <p className="mt-4 text-sm leading-6 text-muted">
+            <p className="mt-4 text-sm leading-7 text-muted">
               {content.description}
             </p>
           </div>
@@ -33,7 +33,7 @@ export function ProductShowcase({ content }: ProductShowcaseProps) {
         </div>
 
         <div className="mt-6 border-t border-white/10 pt-5">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
             {content.platformLabel}
           </p>
           <div className="flex flex-wrap gap-2">
@@ -59,7 +59,7 @@ export function ProductShowcase({ content }: ProductShowcaseProps) {
               <item.icon className="h-5 w-5" aria-hidden="true" />
             </div>
             <h3 className="text-base font-semibold text-ink">{item.title}</h3>
-            <p className="mt-2 text-sm leading-6 text-muted">
+            <p className="mt-2 text-sm leading-7 text-muted">
               {item.description}
             </p>
           </article>

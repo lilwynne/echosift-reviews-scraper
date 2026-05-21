@@ -8,7 +8,7 @@ FeatureMap needs to move from a purely mocked dashboard toward a real review-ing
 
 - `POST /api/reviews` exposes raw scraping results for script/Postman testing.
 - `POST /api/analyze` calls the scraper first, then returns the existing mock dashboard plus scraped review metadata.
-- Product Hunt remains on Apify and now has a deployed self-built actor.
+- Product Hunt now uses the official Product Hunt API v2 GraphQL endpoint with the user's Developer Token.
 - Apple App Store uses the public Apple RSS feed and does not require a token.
 - Google Play uses `google-play-scraper` and does not require a token.
 - Frontend UI, Tailwind classes, and component layout were not changed.
@@ -26,11 +26,13 @@ FeatureMap needs to move from a purely mocked dashboard toward a real review-ing
 
 - Product Hunt:
   - Host: `producthunt.com`
-  - Provider: Apify
-  - Required env: `APIFY_API_TOKEN`
-  - Actor override: `APIFY_PRODUCT_HUNT_ACTOR_ID=feature_map/product-hunt-reviews`
-  - Actor source: `actors/product-hunt-reviews`
-  - Apify internal actor ID: `xHkiWaZEikt9m0kBy`
+  - Provider: Product Hunt official GraphQL (`product-hunt-graphql`)
+  - Required env: `PRODUCT_HUNT_API_TOKEN`
+  - URL format: `https://www.producthunt.com/products/{slug}`
+  - Backend parses `{slug}` from the URL and calls `post(slug: $slug)`
+  - Fetches product metadata (`name`, `tagline`, `votesCount`) and paginated comments
+  - Pagination uses `comments(first:, after:, order: NEWEST)` plus `pageInfo.hasNextPage` / `pageInfo.endCursor`
+  - The old `actors/product-hunt-reviews` Apify actor remains in the repo as historical/fallback reference code but is no longer called by backend ingestion
 - Apple App Store:
   - Host: `apps.apple.com`
   - Provider: Apple RSS
@@ -54,16 +56,12 @@ Smoke-test notes:
 
 - Local App Store API smoke test returned a valid 200 JSON response, but Apple RSS returned an empty feed for tested app/country combinations in this environment.
 - Local Google Play API smoke test reached the API route and returned a friendly scraping error when Google Play timed out from this network.
-- Product Hunt actor deployment succeeded on Apify, latest tested build `0.1.3 / latest`.
-- Product Hunt actor cloud input handling was fixed to use `ACTOR_DEFAULT_KEY_VALUE_STORE_ID`, `ACTOR_INPUT_KEY`, and `ACTOR_DEFAULT_DATASET_ID`.
-- Product Hunt actor default proxy is now disabled because the account does not have access to `DATACENTER`.
-- Product Hunt actor smoke test against `https://www.producthunt.com/products/claude` read input and completed, but returned `SCRAPE_EMPTY_OR_BLOCKED` with zero reviews.
-- Product Hunt actor smoke test using available proxy group `BUYPROXIES94952` completed but page fetches returned `fetch failed`.
+- Product Hunt backend helper tests now cover official GraphQL bearer-token usage, URL slug parsing, comment normalization, and cursor pagination.
 
 ## Remaining Todo
 
-- Configure `.env.local` with `APIFY_API_TOKEN` and `APIFY_PRODUCT_HUNT_ACTOR_ID=feature_map/product-hunt-reviews` for Product Hunt.
-- Debug live Product Hunt extraction in `actors/product-hunt-reviews`; deployment is complete but real review extraction is not yet functionally validated.
+- Configure backend `.env.local` with `PRODUCT_HUNT_API_TOKEN`.
+- Rerun live Product Hunt extraction against known Product Hunt URLs through `/api/reviews`.
 - Test Apple RSS from the deployment network with target customer app links.
 - Test Google Play from the deployment network and tune timeout/retry behavior if needed.
 - Decide whether `/api/analyze` should fail hard on scraping errors or fall back to mock data for MVP demos.

@@ -26,23 +26,11 @@ export function Header({
       <div className="mx-auto flex min-h-16 w-full max-w-7xl flex-col gap-3 px-4 py-3 sm:px-6 md:h-16 md:flex-row md:items-center md:justify-between md:py-0 lg:px-8">
         <FeatureMapLogo tagline={content.tagline} />
 
-        <nav className="hidden items-center gap-1 lg:flex">
-          {content.nav.map((item) => (
-            <a
-              key={item.href}
-              href={item.href}
-              className="rounded-lg px-3 py-2 text-sm font-medium text-slate-300 transition hover:bg-white/10 hover:text-white"
-            >
-              {item.label}
-            </a>
-          ))}
-        </nav>
-
         <div className="flex flex-wrap items-center gap-2">
           <label className="relative flex items-center">
             <span className="sr-only">{content.languageLabel}</span>
             <Globe2
-                className="pointer-events-none absolute left-3 h-4 w-4 text-slate-400"
+              className="pointer-events-none absolute left-3 h-4 w-4 text-slate-400"
               aria-hidden="true"
             />
             <select

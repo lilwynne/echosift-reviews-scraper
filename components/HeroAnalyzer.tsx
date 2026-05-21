@@ -42,10 +42,10 @@ export function HeroAnalyzer({
           <Sparkles className="h-4 w-4" aria-hidden="true" />
           {content.badge}
         </div>
-        <h1 className="max-w-4xl text-balance text-4xl font-semibold tracking-tight text-ink sm:text-6xl">
+        <h1 className="max-w-4xl text-balance text-4xl font-semibold leading-[1.2] text-ink sm:text-6xl sm:leading-[1.16]">
           {content.title}
         </h1>
-        <p className="mt-5 max-w-3xl text-base leading-7 text-muted sm:text-lg">
+        <p className="mt-5 max-w-3xl text-base leading-8 text-muted sm:text-lg">
           {content.description}
         </p>
 
@@ -104,7 +104,7 @@ export function HeroAnalyzer({
         </div>
 
         <div className="mt-5 flex w-full max-w-6xl flex-col items-center justify-between gap-4 text-sm text-muted sm:flex-row">
-          <p>
+          <p className="leading-7">
             {content.currentModel}
             <span className="font-medium text-ink">
               {getModelLabel(selectedModel, language)}

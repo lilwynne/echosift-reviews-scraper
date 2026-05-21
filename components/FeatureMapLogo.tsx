@@ -46,7 +46,7 @@ export function FeatureMapLogo({
       </div>
       {showWordmark && (
         <div>
-          <p className="text-base font-semibold tracking-tight text-ink">
+          <p className="text-base font-semibold text-ink">
             {productName}
           </p>
           {tagline && (

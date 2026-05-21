@@ -31,10 +31,10 @@ export function SubscriptionPanel({ content }: SubscriptionPanelProps) {
           <p className="text-sm font-semibold text-cyan-200">
             {content.eyebrow}
           </p>
-          <h2 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
+          <h2 className="mt-2 text-2xl font-semibold sm:text-3xl">
             {content.title}
           </h2>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">
+          <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-300 sm:text-base">
             {content.description}
           </p>
           <div className="mt-5 flex flex-wrap gap-2">
@@ -76,7 +76,7 @@ export function SubscriptionPanel({ content }: SubscriptionPanelProps) {
               {content.button}
             </button>
           </div>
-          <p className="px-2 pt-3 text-xs leading-5 text-slate-500">
+          <p className="px-2 pt-3 text-xs leading-6 text-slate-500">
             {isSubscribed ? content.success : content.privacy}
           </p>
         </form>

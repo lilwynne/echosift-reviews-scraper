@@ -14,10 +14,10 @@ export function UseCases({ content }: UseCasesProps) {
         <p className="text-sm font-semibold text-cyan-200">
           {content.eyebrow}
         </p>
-        <h2 className="mt-3 text-3xl font-semibold tracking-tight text-ink">
+        <h2 className="mt-3 text-3xl font-semibold text-ink">
           {content.title}
         </h2>
-        <p className="mt-4 text-sm leading-6 text-muted">
+        <p className="mt-4 text-sm leading-7 text-muted">
           {content.description}
         </p>
       </div>
@@ -36,10 +36,10 @@ export function UseCases({ content }: UseCasesProps) {
                 <persona.icon className="h-4 w-4" aria-hidden="true" />
               </div>
             </div>
-            <h3 className="text-lg font-semibold tracking-tight text-ink">
+            <h3 className="text-lg font-semibold text-ink">
               {persona.title}
             </h3>
-            <p className="mt-3 text-sm leading-6 text-muted">
+            <p className="mt-3 text-sm leading-7 text-muted">
               {persona.description}
             </p>
           </article>

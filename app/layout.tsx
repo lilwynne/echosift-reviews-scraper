@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "FeatureMap - 用户反馈到功能路线图",
-  description: "将产品评价转化为需求地图、情绪洞察和迭代优先级。"
+  title: "FeatureMap - 用户评价分析与竞品调研",
+  description: "帮助运营人员、小企业主和产品经理分析用户评价、情绪和竞品差异。"
 };
 
 export default function RootLayout({

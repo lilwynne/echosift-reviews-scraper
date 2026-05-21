@@ -11,6 +11,6 @@
     "dataset": "./dataset_schema.json"
   },
   "defaultRunOptions": {
-    "memoryMbytes": 512
+    "memoryMbytes": 1024
   }
 }

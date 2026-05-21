@@ -9,7 +9,7 @@ export function PriorityKanban({ content }: PriorityKanbanProps) {
     <section className="rounded-xl border border-line bg-white/10 p-5 shadow-sm backdrop-blur-xl">
       <div className="mb-5 flex flex-col justify-between gap-2 sm:flex-row sm:items-end">
         <div>
-          <h2 className="text-lg font-semibold tracking-tight text-ink">
+          <h2 className="text-lg font-semibold text-ink">
             {content.title}
           </h2>
           <p className="mt-1 text-sm text-muted">
@@ -48,14 +48,14 @@ export function PriorityKanban({ content }: PriorityKanbanProps) {
                   className="rounded-lg border border-white/10 bg-slate-950/50 p-4 shadow-sm"
                 >
                   <div className="mb-3 flex items-start justify-between gap-3">
-                    <h4 className="text-sm font-semibold leading-5 text-ink">
+                    <h4 className="text-sm font-semibold leading-6 text-ink">
                       {card.title}
                     </h4>
                     <span className="shrink-0 rounded-md bg-white/10 px-2 py-1 text-xs font-semibold text-slate-300">
                       {card.priority}
                     </span>
                   </div>
-                  <p className="text-sm leading-6 text-muted">{card.summary}</p>
+                  <p className="text-sm leading-7 text-muted">{card.summary}</p>
                   <div className="mt-4 flex items-center justify-between border-t border-white/10 pt-3">
                     <span className="text-xs font-semibold text-slate-400">
                       {card.count}

@@ -3,7 +3,7 @@ export function statusFromScrapeErrorCode(code: string) {
     return 400;
   }
 
-  if (code === "MISSING_APIFY_API_TOKEN") {
+  if (code === "MISSING_APIFY_API_TOKEN" || code === "MISSING_PRODUCT_HUNT_API_TOKEN") {
     return 500;
   }
 

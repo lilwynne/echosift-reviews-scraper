@@ -33,7 +33,7 @@ export function Dashboard({
           <p className="text-sm font-medium text-cyan-200">
             {content.dashboard.complete}
           </p>
-          <h2 className="mt-1 truncate text-2xl font-semibold tracking-tight text-ink">
+          <h2 className="mt-1 truncate text-2xl font-semibold text-ink">
             {content.dashboard.title}
           </h2>
           <p className="mt-2 truncate text-sm text-muted">

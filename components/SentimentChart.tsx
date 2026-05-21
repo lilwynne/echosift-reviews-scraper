@@ -23,7 +23,7 @@ export function SentimentChart({ content }: SentimentChartProps) {
       <article className="rounded-xl border border-line bg-white/10 p-5 shadow-sm backdrop-blur-xl">
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-lg font-semibold tracking-tight text-ink">
+            <h2 className="text-lg font-semibold text-ink">
               {content.title}
             </h2>
             <p className="mt-1 text-sm text-muted">{content.subtitle}</p>
@@ -84,7 +84,7 @@ export function SentimentChart({ content }: SentimentChartProps) {
 
       <article className="rounded-xl border border-line bg-white/10 p-5 shadow-sm backdrop-blur-xl">
         <div className="mb-4">
-          <h2 className="text-lg font-semibold tracking-tight text-ink">
+          <h2 className="text-lg font-semibold text-ink">
             {content.trendTitle}
           </h2>
           <p className="mt-1 text-sm text-muted">
@@ -94,7 +94,10 @@ export function SentimentChart({ content }: SentimentChartProps) {
 
         <div className="h-80">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={trendData} margin={{ top: 8, right: 8, left: -24, bottom: 0 }}>
+            <AreaChart
+              data={trendData}
+              margin={{ top: 8, right: 8, left: -24, bottom: 0 }}
+            >
               <defs>
                 <linearGradient id="positive" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />

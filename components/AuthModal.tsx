@@ -29,10 +29,10 @@ export function AuthModal({
       <div className="w-full max-w-md rounded-xl border border-line bg-slate-950/95 p-6 shadow-soft">
         <div className="mb-5 flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-xl font-semibold tracking-tight text-ink">
+            <h2 className="text-xl font-semibold text-ink">
               {isLogin ? content.loginTitle : content.signupTitle}
             </h2>
-            <p className="mt-2 text-sm leading-6 text-muted">
+            <p className="mt-2 text-sm leading-7 text-muted">
               {content.helper}
             </p>
           </div>
