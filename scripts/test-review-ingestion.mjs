@@ -9,7 +9,7 @@ const originalEnv = {
 const originalFetch = globalThis.fetch;
 
 async function loadModule() {
-  return import("../lib/apify-reviews.ts");
+  return import("../lib/reviews.ts");
 }
 
 function restoreEnv() {

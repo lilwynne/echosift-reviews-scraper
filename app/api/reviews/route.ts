@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchReviews } from "@/lib/apify-reviews";
+import { fetchReviews } from "@/lib/reviews";
 import { statusFromScrapeErrorCode } from "@/lib/api-errors";
 
 type ReviewsRequestBody = {

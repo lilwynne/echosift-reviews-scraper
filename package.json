@@ -7,10 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "actor:build": "npx tsc -p actors/product-hunt-reviews/tsconfig.json",
-    "actor:test": "npm run actor:build && node --test actors/product-hunt-reviews/tests/*.test.mjs",
-    "actor:deploy": "node scripts/deploy-product-hunt-actor.mjs",
-    "test:apify-reviews": "node --experimental-strip-types --test scripts/test-apify-reviews.mjs"
+    "test:review-ingestion": "node --experimental-strip-types --test scripts/test-review-ingestion.mjs"
   },
   "dependencies": {
     "autoprefixer": "^10.4.20",

@@ -7,7 +7,8 @@ FeatureMap is a Next.js App Router MVP prototype for turning product review URLs
 The frontend prototype and UI are considered confirmed by the user. Important constraint for future work:
 
 - Do not modify existing UI styles, Tailwind class names, or component layout unless the user explicitly asks.
-- Recent work implemented the server-side review ingestion layer and API routes. No UI files were changed.
+- Recent backend work implemented server-side review ingestion and API routes. The Product Hunt path now uses the official Product Hunt API v2 GraphQL endpoint.
+- The old Product Hunt crawler/deployment path has been removed from this repo. There is no Apify actor directory, actor deploy script, or actor GitHub workflow left in the project.
 
 The local dev server was last started with:
 
@@ -41,7 +42,7 @@ http://127.0.0.1:3000
   - `deepseek`
   - `claude`
   - `gpt4o`
-- Site is now dark mode with cold blue/cyan gradient background.
+- Site is dark mode with cold blue/cyan gradient background.
 - Header contains logo, nav, language selector, login, signup.
 - Header nav uses `价格 / 價格 / Pricing`, not subscription.
 - Bottom email subscription banner was removed from the rendered page.
@@ -69,23 +70,18 @@ http://127.0.0.1:3000
   - Expects `content: LocaleContent["kanban"]`.
 - `app/api/analyze/route.ts`
   - Backend API route for analysis.
-  - Now calls `fetchReviews(url)` before returning the existing mock dashboard.
+  - Calls `fetchReviews(url)` before returning the existing mock dashboard.
 - `app/api/reviews/route.ts`
-  - Backend API route for testing raw review scraping.
-- `lib/apify-reviews.ts`
-  - Server-side multi-source review scraper helper.
+  - Backend API route for testing raw review ingestion.
+- `lib/reviews.ts`
+  - Server-side multi-source review ingestion helper.
+  - Product Hunt uses official GraphQL, App Store uses Apple RSS, and Google Play uses `google-play-scraper`.
 - `lib/api-errors.ts`
-  - Shared scrape error-code to HTTP-status mapping.
+  - Shared review-ingestion error-code to HTTP-status mapping.
+- `scripts/test-review-ingestion.mjs`
+  - Local unit tests for Product Hunt GraphQL review ingestion helper behavior.
 - `scripts/test-reviews.mjs`
-  - Local test script that calls `POST /api/reviews`.
-- `scripts/deploy-product-hunt-actor.mjs`
-  - Runs actor tests and deploys `actors/product-hunt-reviews` to Apify using `APIFY_TOKEN` or `APIFY_API_TOKEN`.
-- `.github/workflows/deploy-product-hunt-actor.yml`
-  - Deploys the Product Hunt actor automatically on pushes to `main` that change the actor, deployment script, or npm manifests.
-- `actors/product-hunt-reviews/`
-  - Self-built Apify actor for Product Hunt product review scraping.
-  - Uses Node/TypeScript, raw fetch plus Playwright fallback, and structured HTML/JSON parsing.
-  - Deployed Apify actor: `feature_map/product-hunt-reviews` (`xHkiWaZEikt9m0kBy`).
+  - Local smoke-test script that calls `POST /api/reviews` on a running dev server.
 
 ## API Route Implemented
 
@@ -127,7 +123,7 @@ Success response shape:
 
 `scrapeSource`, `reviewCount`, and `reviews` come from the review ingestion helper. Dashboard fields are still mock data from `lib/mock-data.ts`.
 
-## Review Scraping
+## Review Ingestion
 
 Endpoint:
 
@@ -160,25 +156,22 @@ Optional environment variables:
 ```env
 REVIEWS_MAX_REVIEWS=100
 REVIEWS_REQUEST_TIMEOUT_MS=120000
-APIFY_MAX_REVIEWS=100
-APIFY_REQUEST_TIMEOUT_MS=120000
 ```
 
 Implementation details:
 
-- Product Hunt now uses the official Product Hunt API v2 GraphQL endpoint:
+- Product Hunt uses the official Product Hunt API v2 GraphQL endpoint:
   `https://api.producthunt.com/v2/api/graphql`.
 - The public API still accepts a Product Hunt URL. Backend code parses `/products/{slug}` from the URL and calls `post(slug: $slug)`.
 - Product Hunt GraphQL query fetches product metadata (`name`, `tagline`, `votesCount`, counts/ratings metadata) and paginated `comments(first:, after:, order: NEWEST)`.
 - Pagination uses `pageInfo.hasNextPage` and `pageInfo.endCursor`, looping until all available comments are fetched or `REVIEWS_MAX_REVIEWS` is reached.
 - Normalized Product Hunt comments include `text`, `author`, `authorUsername`, `date`, `votes`, `productName`, and `sourceUrl`.
-- Product Hunt response now includes `provider: "product-hunt-graphql"` and a `product` metadata object.
-- The old self-built Apify actor under `actors/product-hunt-reviews/` remains in the repo as historical/fallback reference code, but the backend no longer calls Apify for Product Hunt.
+- Product Hunt response includes `provider: "product-hunt-graphql"` and a `product` metadata object.
 - App Store uses Apple public RSS:
   `https://itunes.apple.com/{country}/rss/customerreviews/page={page}/id={appId}/sortby=mostrecent/json`
 - Google Play uses the `google-play-scraper` npm package.
-- `REVIEWS_MAX_REVIEWS` defaults to 100 and falls back to legacy `APIFY_MAX_REVIEWS`.
-- Uses local `AbortController` timeout, default 120 seconds.
+- `REVIEWS_MAX_REVIEWS` defaults to 100.
+- Request timeout uses local `AbortController`, default 120 seconds.
 - Returns friendly JSON errors for missing Product Hunt token, unsupported source, scraping failures, timeout, and network errors.
 
 The response is aligned with the current Dashboard mock structure. Since JSON cannot return lucide React components, the API serializes icons as string keys:
@@ -211,31 +204,26 @@ Other error codes currently implemented:
 - `INVALID_MODEL`
 - `INVALID_LANGUAGE`
 - `MISSING_PRODUCT_HUNT_API_TOKEN`
-- `MISSING_APIFY_API_TOKEN`
 - `UNSUPPORTED_REVIEW_SOURCE`
-- `APIFY_REQUEST_FAILED`
-- `APIFY_NETWORK_ERROR`
 - `REVIEW_FETCH_TIMEOUT`
 - `REVIEW_FETCH_NETWORK_ERROR`
 - `REVIEW_FETCH_FAILED`
 
-## Files Modified During Current Backend Task
+## Current Cleanup
 
-- Added `lib/apify-reviews.ts`
-- Added `lib/api-errors.ts`
-- Added `app/api/reviews/route.ts`
-- Added `scripts/test-reviews.mjs`
-- Added `actors/product-hunt-reviews/`
-- Added `docs/issue.md`
-- Added `docs/pr-description.md`
-- Updated `app/api/analyze/route.ts`
-- Updated `docs/ai-handoff.md`
+Completed in the latest cleanup:
 
-No existing UI file was changed during the review scraping implementation.
+- Removed `actors/product-hunt-reviews/`.
+- Removed `.github/workflows/deploy-product-hunt-actor.yml`.
+- Removed `scripts/deploy-product-hunt-actor.mjs`.
+- Removed root `actor:*` npm scripts.
+- Renamed the active ingestion helper from `lib/apify-reviews.ts` to `lib/reviews.ts`.
+- Renamed the helper test script from `scripts/test-apify-reviews.mjs` to `scripts/test-review-ingestion.mjs`.
+- Removed obsolete actor-related response fields, error-code mappings, environment-variable fallbacks, and loading copy references.
 
 ## Earlier Major Frontend Files Created/Modified
 
-These existed before the current backend task and should be treated as user-approved UI:
+These existed before the backend cleanup and should be treated as user-approved UI:
 
 - `app/globals.css`
 - `app/layout.tsx`
@@ -258,100 +246,42 @@ These existed before the current backend task and should be treated as user-appr
 
 ## Test Results
 
-Last successful checks:
+Latest successful checks after removing the old actor path:
 
 ```bash
-npm run test:apify-reviews
+npm run test:review-ingestion
+npm run lint
 npm run build
 ```
 
-Results:
-
-- Product Hunt GraphQL helper tests passed.
-- Production build: passed.
-- Next build output includes:
+Expected build output includes:
 
 ```text
 ƒ /api/analyze
 ƒ /api/reviews
 ```
 
-API smoke test summary:
+Product Hunt helper tests cover:
 
-```json
-{
-  "status": "ok",
-  "sourceUrl": "https://www.producthunt.com/products/example-product",
-  "kpis": 3,
-  "trendData": 7,
-  "columns": 3,
-  "lastIcon": "AlertTriangle"
-}
-```
-
-Invalid URL smoke test returned:
-
-```json
-{
-  "error": {
-    "code": "INVALID_URL",
-    "message": "请输入有效的产品链接。"
-  }
-}
-```
-
-Apify actor deployment:
-
-```text
-Actor ID: feature_map/product-hunt-reviews
-Internal ID: xHkiWaZEikt9m0kBy
-Latest build tested: 0.1.3 / latest
-```
-
-Local deploy command:
-
-```bash
-APIFY_TOKEN=your_apify_token npm run actor:deploy
-```
-
-`APIFY_API_TOKEN` is also accepted. The GitHub workflow accepts either an `APIFY_TOKEN` or `APIFY_API_TOKEN` repository secret.
-
-Apify actor smoke tests:
-
-- Deployment/build succeeded.
-- Actor successfully reads Apify run input after the `ACTOR_DEFAULT_*` env var fix.
-- Current extraction order is Playwright fallback, structured page-data parsing, then legacy DOM-text parsing.
-- Local actor tests now cover challenge fallback and structured review parsing.
-- Live Apify validation still needs to be rerun after the fallback/parser change.
-
-Current backend Product Hunt tests:
-
-- `scripts/test-apify-reviews.mjs` now validates the Product Hunt official GraphQL code path despite the legacy filename.
-- Tests cover bearer-token usage, URL slug parsing, comment normalization, and `pageInfo.endCursor` pagination.
-
-Runtime recovery performed after build/dev cache mismatch:
-
-- A stale Next dev process was listening on `127.0.0.1:3000`.
-- `.next` cache was removed and the dev server was restarted.
-- Dev server compiled `/` successfully and logged `GET / 200`.
+- Official GraphQL bearer-token usage.
+- URL slug parsing.
+- Comment normalization.
+- `pageInfo.endCursor` pagination.
+- Missing `PRODUCT_HUNT_API_TOKEN` error behavior.
 
 ## Known Constraints
 
-- Network access may require using local proxy/approval for package installs.
-- Starting Next dev server requires escalation because sandbox blocks local port listening.
+- Network access may require local proxy/approval for package installs or live source tests.
+- Starting Next dev server may require escalation if the sandbox blocks local port listening.
 - Do not run destructive git commands.
-- Git is initialized now, but the working tree currently shows the project files as untracked.
 - Product Hunt backend calls require a valid `PRODUCT_HUNT_API_TOKEN` in backend `.env.local`.
-- The deployed self-built actor still exists but is no longer used by backend Product Hunt ingestion.
-- Apify account proxy access observed during earlier deployment: `DATACENTER` is not available. This only matters if the legacy actor is revived.
 - App Store RSS may return an empty feed for some app/country combinations.
 - Google Play scraping depends on public Google Play network availability and may timeout in restricted networks.
-- `POST /api/analyze` now depends on scraping before returning the mock dashboard. Product Hunt without `PRODUCT_HUNT_API_TOKEN` returns `MISSING_PRODUCT_HUNT_API_TOKEN`.
+- `POST /api/analyze` currently depends on scraping before returning the mock dashboard. Product Hunt without `PRODUCT_HUNT_API_TOKEN` returns `MISSING_PRODUCT_HUNT_API_TOKEN`.
 
 ## Recommended Next Steps
 
 1. Add backend `.env.local` with `PRODUCT_HUNT_API_TOKEN`, then run `/api/reviews` Product Hunt integration smoke tests against known Product Hunt URLs.
-2. Optionally keep or remove the legacy Apify actor path after the GraphQL flow has been validated in production.
-3. Decide whether `/api/analyze` should fail hard on scraping errors or fall back to the existing mock dashboard during MVP demos.
-4. Wire frontend analysis flow to call `POST /api/analyze` only after the API behavior above is confirmed.
-5. Use normalized `reviews` as the input for the next AI analysis pipeline step.
+2. Decide whether `/api/analyze` should fail hard on scraping errors or fall back to the existing mock dashboard during MVP demos.
+3. Wire frontend analysis flow to call `POST /api/analyze` only after the API behavior above is confirmed.
+4. Use normalized `reviews` as the input for the next AI analysis pipeline step.

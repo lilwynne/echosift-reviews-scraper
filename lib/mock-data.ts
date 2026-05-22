@@ -126,7 +126,7 @@ export const localizedContent = {
     loading: {
       title: "正在分析评价",
       messages: [
-        "正在调取 Apify 接口抓取评价...",
+        "正在调取评论接口抓取评价...",
         "正在使用大模型进行情感降噪...",
         "正在整理结构化分析结果..."
       ]
@@ -366,7 +366,7 @@ export const localizedContent = {
     loading: {
       title: "正在分析評價",
       messages: [
-        "正在調取 Apify 介面抓取評價...",
+        "正在調取評論介面抓取評價...",
         "正在使用大模型進行情緒降噪...",
         "正在整理結構化分析結果..."
       ]
@@ -606,7 +606,7 @@ export const localizedContent = {
     loading: {
       title: "Analyzing reviews",
       messages: [
-        "Fetching reviews through the Apify pipeline...",
+        "Fetching reviews through the review APIs...",
         "Denoising sentiment with the selected model...",
         "Organizing the structured analysis result..."
       ]

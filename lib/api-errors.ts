@@ -3,17 +3,15 @@ export function statusFromScrapeErrorCode(code: string) {
     return 400;
   }
 
-  if (code === "MISSING_APIFY_API_TOKEN" || code === "MISSING_PRODUCT_HUNT_API_TOKEN") {
+  if (code === "MISSING_PRODUCT_HUNT_API_TOKEN") {
     return 500;
   }
 
-  if (code === "APIFY_TIMEOUT" || code === "REVIEW_FETCH_TIMEOUT") {
+  if (code === "REVIEW_FETCH_TIMEOUT") {
     return 504;
   }
 
   if (
-    code === "APIFY_REQUEST_FAILED" ||
-    code === "APIFY_NETWORK_ERROR" ||
     code === "REVIEW_FETCH_FAILED" ||
     code === "REVIEW_FETCH_NETWORK_ERROR"
   ) {

@@ -1,25 +1,26 @@
-# Issue: Implement Multi-Source Review Scraping Backend
+# Issue: Multi-Source Review Ingestion Backend
 
 ## Background
 
-FeatureMap needs to move from a purely mocked dashboard toward a real review-ingestion pipeline. The backend now accepts public product links and fetches normalized reviews from Product Hunt, Apple App Store, or Google Play without changing the approved frontend UI.
+FeatureMap needs to move from a purely mocked dashboard toward a real review-ingestion pipeline. The backend accepts public product links and fetches normalized reviews from Product Hunt, Apple App Store, or Google Play without changing the approved frontend layout.
 
 ## Current Status
 
-- `POST /api/reviews` exposes raw scraping results for script/Postman testing.
-- `POST /api/analyze` calls the scraper first, then returns the existing mock dashboard plus scraped review metadata.
-- Product Hunt now uses the official Product Hunt API v2 GraphQL endpoint with the user's Developer Token.
+- `POST /api/reviews` exposes raw review-ingestion results for script/Postman testing.
+- `POST /api/analyze` calls the ingestion helper first, then returns the existing mock dashboard plus scraped review metadata.
+- Product Hunt uses the official Product Hunt API v2 GraphQL endpoint with the user's Developer Token.
 - Apple App Store uses the public Apple RSS feed and does not require a token.
 - Google Play uses `google-play-scraper` and does not require a token.
-- Frontend UI, Tailwind classes, and component layout were not changed.
+- The old Product Hunt crawler/deployment path has been removed from the repo.
+- Frontend Tailwind classes and component layout were not changed.
 
 ## Key Decisions
 
-- Keep scraping in a server-only helper: `lib/apify-reviews.ts`.
+- Keep ingestion in a server-only helper: `lib/reviews.ts`.
 - Keep the public `fetchReviews(url)` interface stable for both API routes.
 - Return normalized `NormalizedReview[]` across sources.
-- Use `provider` instead of requiring every source to expose `actorId`.
-- Add `REVIEWS_MAX_REVIEWS` and `REVIEWS_REQUEST_TIMEOUT_MS`, with legacy `APIFY_MAX_REVIEWS` / `APIFY_REQUEST_TIMEOUT_MS` fallback.
+- Use `provider` to identify the active backend provider for each source.
+- Use `REVIEWS_MAX_REVIEWS` and `REVIEWS_REQUEST_TIMEOUT_MS` for ingestion limits/timeouts.
 - Keep `/api/analyze` response compatible with the existing mock dashboard while adding `scrapeSource`, `reviewCount`, and `reviews`.
 
 ## Supported Sources
@@ -32,7 +33,6 @@ FeatureMap needs to move from a purely mocked dashboard toward a real review-ing
   - Backend parses `{slug}` from the URL and calls `post(slug: $slug)`
   - Fetches product metadata (`name`, `tagline`, `votesCount`) and paginated comments
   - Pagination uses `comments(first:, after:, order: NEWEST)` plus `pageInfo.hasNextPage` / `pageInfo.endCursor`
-  - The old `actors/product-hunt-reviews` Apify actor remains in the repo as historical/fallback reference code but is no longer called by backend ingestion
 - Apple App Store:
   - Host: `apps.apple.com`
   - Provider: Apple RSS
@@ -42,10 +42,19 @@ FeatureMap needs to move from a purely mocked dashboard toward a real review-ing
   - Provider: `google-play-scraper`
   - URL format: `https://play.google.com/store/apps/details?id={APP_ID}&hl=en&gl=us`
 
+## Cleanup Completed
+
+- Removed the old Product Hunt actor directory.
+- Removed the old actor deployment script and GitHub workflow.
+- Removed root `actor:*` npm scripts.
+- Renamed the active review helper and helper tests to neutral review-ingestion names.
+- Removed obsolete actor response fields, error mappings, environment-variable fallbacks, and loading copy references.
+
 ## Testing
 
 Completed:
 
+- `npm run test:review-ingestion` passed.
 - `npm run lint` passed with no warnings or errors.
 - `npm run build` passed.
 - Build output includes both API routes:
@@ -54,9 +63,10 @@ Completed:
 
 Smoke-test notes:
 
-- Local App Store API smoke test returned a valid 200 JSON response, but Apple RSS returned an empty feed for tested app/country combinations in this environment.
-- Local Google Play API smoke test reached the API route and returned a friendly scraping error when Google Play timed out from this network.
-- Product Hunt backend helper tests now cover official GraphQL bearer-token usage, URL slug parsing, comment normalization, and cursor pagination.
+- Product Hunt backend helper tests cover official GraphQL bearer-token usage, URL slug parsing, comment normalization, missing-token handling, and cursor pagination.
+- Live Product Hunt extraction still needs a real `PRODUCT_HUNT_API_TOKEN`.
+- App Store RSS can return an empty feed for some app/country combinations.
+- Google Play can timeout or fail from restricted networks.
 
 ## Remaining Todo
 

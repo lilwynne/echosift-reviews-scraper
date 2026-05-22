@@ -38,7 +38,6 @@ export type FetchReviewsSuccess = {
   source: ReviewSource;
   sourceUrl: string;
   provider: "product-hunt-graphql" | "apple-rss" | "google-play-scraper";
-  actorId?: string;
   product?: NormalizedProduct;
   count: number;
   reviews: NormalizedReview[];
@@ -179,16 +178,13 @@ function getPositiveIntegerEnv(name: string, fallback: number) {
 }
 
 function getMaxReviews() {
-  return getPositiveIntegerEnv(
-    "REVIEWS_MAX_REVIEWS",
-    getPositiveIntegerEnv("APIFY_MAX_REVIEWS", DEFAULT_MAX_REVIEWS)
-  );
+  return getPositiveIntegerEnv("REVIEWS_MAX_REVIEWS", DEFAULT_MAX_REVIEWS);
 }
 
 function getRequestTimeoutMs() {
   return getPositiveIntegerEnv(
     "REVIEWS_REQUEST_TIMEOUT_MS",
-    getPositiveIntegerEnv("APIFY_REQUEST_TIMEOUT_MS", DEFAULT_REQUEST_TIMEOUT_MS)
+    DEFAULT_REQUEST_TIMEOUT_MS
   );
 }
 

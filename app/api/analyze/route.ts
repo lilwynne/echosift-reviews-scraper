@@ -7,7 +7,7 @@ import {
   localizedContent,
   trendData
 } from "@/lib/mock-data";
-import { fetchReviews } from "@/lib/apify-reviews";
+import { fetchReviews } from "@/lib/reviews";
 import { statusFromScrapeErrorCode } from "@/lib/api-errors";
 
 type AnalyzeRequestBody = {
