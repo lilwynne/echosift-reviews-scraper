@@ -12,7 +12,13 @@ import {
   getRequestPathname,
   tryAcquireAnalysisSlot
 } from "@/lib/api-guards";
-import type { AnalyzeApiResponse } from "@/lib/analysis-types";
+import type {
+  AnalysisResult,
+  AnalyzeApiResponse,
+  EvidenceMap,
+  ReviewEvidence,
+  ReviewSentiment
+} from "@/lib/analysis-types";
 import { Language, languages } from "@/lib/mock-data";
 import { fetchReviews, type NormalizedReview } from "@/lib/reviews";
 
@@ -26,6 +32,7 @@ const validLanguages = new Set<Language>(
 );
 const DEFAULT_ANALYSIS_MAX_REVIEWS = 100;
 const DEFAULT_ANALYSIS_REVIEW_TEXT_MAX_CHARS = 1200;
+const EVIDENCE_REVIEWS_PER_CARD = 3;
 
 function getPositiveIntegerEnv(name: string, fallback: number) {
   const value = Number.parseInt(process.env[name] ?? "", 10);
@@ -52,6 +59,18 @@ function elapsedMs(start: number) {
 
 function trimTextForAnalysis(text: string, maxChars: number) {
   return text.length > maxChars ? `${text.slice(0, maxChars)}...` : text;
+}
+
+function getReviewSnippetId(review: NormalizedReview, index: number) {
+  return `${review.source}:${review.id ?? "review"}:${index + 1}`;
+}
+
+function buildReviewEvidence(reviews: NormalizedReview[]): ReviewEvidence[] {
+  return reviews.map((review, index) => ({
+    ...review,
+    snippetId: getReviewSnippetId(review, index),
+    reviewIndex: index + 1
+  }));
 }
 
 function jsonError(
@@ -123,6 +142,143 @@ function buildReviewsText(reviews: NormalizedReview[], maxTextChars: number) {
       formatReviewForAnalysis(review, index, maxTextChars)
     )
     .join("\n\n---\n\n");
+}
+
+function normalizeEvidenceIndexes(value: unknown, reviewCount: number) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const indexes: number[] = [];
+
+  for (const item of value) {
+    const index =
+      typeof item === "number" ? item : Number.parseInt(String(item), 10);
+
+    if (
+      Number.isInteger(index) &&
+      index >= 1 &&
+      index <= reviewCount &&
+      !indexes.includes(index)
+    ) {
+      indexes.push(index);
+    }
+
+    if (indexes.length >= EVIDENCE_REVIEWS_PER_CARD) {
+      break;
+    }
+  }
+
+  return indexes;
+}
+
+function filterReviewsBySentiment(
+  reviews: ReviewEvidence[],
+  sentiment: ReviewSentiment
+) {
+  const ratedReviews = reviews.filter(
+    (review) => typeof review.rating === "number"
+  );
+
+  if (sentiment === "positive") {
+    return ratedReviews.filter((review) => Number(review.rating) >= 4);
+  }
+
+  if (sentiment === "negative") {
+    return ratedReviews.filter((review) => Number(review.rating) <= 2);
+  }
+
+  return ratedReviews.filter((review) => Number(review.rating) === 3);
+}
+
+function getFallbackEvidenceIds(
+  reviews: ReviewEvidence[],
+  sentiment: ReviewSentiment,
+  offset: number
+) {
+  const matchingReviews = filterReviewsBySentiment(reviews, sentiment);
+  const candidates = matchingReviews.length > 0 ? matchingReviews : reviews;
+
+  if (candidates.length === 0) {
+    return [];
+  }
+
+  const ids: string[] = [];
+  const count = Math.min(EVIDENCE_REVIEWS_PER_CARD, candidates.length);
+
+  for (let index = 0; index < count; index += 1) {
+    ids.push(candidates[(offset + index) % candidates.length].snippetId);
+  }
+
+  return ids;
+}
+
+function resolveEvidenceIds(
+  rawIndexes: unknown,
+  reviews: ReviewEvidence[],
+  fallbackSentiment: ReviewSentiment,
+  fallbackOffset: number
+) {
+  const ids = normalizeEvidenceIndexes(rawIndexes, reviews.length)
+    .map((index) => reviews[index - 1]?.snippetId)
+    .filter((id): id is string => Boolean(id));
+
+  if (ids.length > 0) {
+    return ids;
+  }
+
+  return getFallbackEvidenceIds(reviews, fallbackSentiment, fallbackOffset);
+}
+
+function buildEvidenceMap(
+  analysis: AnalysisResult,
+  reviews: ReviewEvidence[]
+): EvidenceMap {
+  const painPointEvidence =
+    analysis.deepInsights.painPointEvidenceReviewIndexes ?? [];
+  const featureRequestEvidence =
+    analysis.deepInsights.featureRequestEvidenceReviewIndexes ?? [];
+  const typicalVoiceEvidence =
+    analysis.typicalVoiceEvidenceReviewIndexes ?? {};
+
+  return {
+    painPoints: analysis.deepInsights.highFreqPainPoints.map((_, index) =>
+      resolveEvidenceIds(
+        painPointEvidence[index],
+        reviews,
+        "negative",
+        index
+      )
+    ),
+    featureRequests: analysis.deepInsights.featureRequests.map((_, index) =>
+      resolveEvidenceIds(
+        featureRequestEvidence[index],
+        reviews,
+        "positive",
+        index
+      )
+    ),
+    typicalVoices: {
+      positive: resolveEvidenceIds(
+        typicalVoiceEvidence.positive,
+        reviews,
+        "positive",
+        0
+      ),
+      neutral: resolveEvidenceIds(
+        typicalVoiceEvidence.neutral,
+        reviews,
+        "neutral",
+        0
+      ),
+      negative: resolveEvidenceIds(
+        typicalVoiceEvidence.negative,
+        reviews,
+        "negative",
+        0
+      )
+    }
+  };
 }
 
 export async function POST(request: Request) {
@@ -198,7 +354,8 @@ export async function POST(request: Request) {
       );
     }
 
-    let analysis;
+    const reviews = buildReviewEvidence(scrapeResult.reviews);
+    let analysis: AnalysisResult;
 
     try {
       const analysisStart = performance.now();
@@ -237,6 +394,8 @@ export async function POST(request: Request) {
       language,
       scrapeSource: scrapeResult.source,
       reviewCount: scrapeResult.count,
+      reviews,
+      evidence: buildEvidenceMap(analysis, reviews),
       analysis
     };
 

@@ -23,11 +23,18 @@ export type FeedbackAnalysisResult = {
   deepInsights: {
     highFreqPainPoints: string[];
     featureRequests: string[];
+    painPointEvidenceReviewIndexes?: number[][];
+    featureRequestEvidenceReviewIndexes?: number[][];
   };
   typicalVoices: {
     positive: string;
     neutral: string;
     negative: string;
+  };
+  typicalVoiceEvidenceReviewIndexes?: {
+    positive: number[];
+    neutral: number[];
+    negative: number[];
   };
 };
 
@@ -100,14 +107,35 @@ const ANALYSIS_SYSTEM_PROMPT = `你是一位资深的用户体验（UX）分析�
       "功能转化1（20字以内，将痛点转化为建设性改进请求，例如：跨设备同步当前任务状态）",
       "功能转化2",
       "功能转化3"
+    ],
+    "painPointEvidenceReviewIndexes": [
+      [3, 12, 18],
+      [7, 21],
+      [4]
+    ],
+    "featureRequestEvidenceReviewIndexes": [
+      [5, 9],
+      [2, 14],
+      [6]
     ]
   },
   "typicalVoices": {
     "positive": "提取的1条最具代表性的正向用户原话",
     "neutral": "提取的1条最具代表性的中立用户原话",
     "negative": "提取的1条最具代表性的负向用户原话"
+  },
+  "typicalVoiceEvidenceReviewIndexes": {
+    "positive": [1, 8],
+    "neutral": [10],
+    "negative": [3, 12]
   }
-}`;
+}
+
+证据编号规则：
+- 用户输入中的每条评论都以 #1、#2、#3 这样的编号开头。
+- 所有 evidenceReviewIndexes 字段必须只填写这些真实输入评论编号，不要编造不存在的编号。
+- 每个数组最多返回 3 个编号，优先选择最能直接支撑对应痛点、功能请求或典型声音的原始评论。
+- 如果没有足够证据，可以少于 3 个，但不要返回空数组，除非输入评论确实无法支撑该项。`;
 
 const defaultClientFactory: AnalyzeFeedbackClientFactory = (options) =>
   new OpenAI(options);

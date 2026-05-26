@@ -1,4 +1,18 @@
 import type { Language } from "@/lib/mock-data";
+import type { NormalizedReview } from "@/lib/reviews";
+
+export type ReviewSentiment = "positive" | "neutral" | "negative";
+
+export type ReviewEvidence = NormalizedReview & {
+  snippetId: string;
+  reviewIndex: number;
+};
+
+export type EvidenceMap = {
+  painPoints: string[][];
+  featureRequests: string[][];
+  typicalVoices: Record<ReviewSentiment, string[]>;
+};
 
 export type AnalysisResult = {
   insightPreview: {
@@ -20,12 +34,15 @@ export type AnalysisResult = {
   deepInsights: {
     highFreqPainPoints: string[];
     featureRequests: string[];
+    painPointEvidenceReviewIndexes?: number[][];
+    featureRequestEvidenceReviewIndexes?: number[][];
   };
   typicalVoices: {
     positive: string;
     neutral: string;
     negative: string;
   };
+  typicalVoiceEvidenceReviewIndexes?: Partial<Record<ReviewSentiment, number[]>>;
 };
 
 export type AnalyzeApiResponse = {
@@ -33,5 +50,7 @@ export type AnalyzeApiResponse = {
   language: Language;
   scrapeSource: string;
   reviewCount: number;
+  reviews: ReviewEvidence[];
+  evidence: EvidenceMap;
   analysis: AnalysisResult;
 };

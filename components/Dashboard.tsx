@@ -64,6 +64,8 @@ export function Dashboard({
         />
         <PriorityKanban
           analysis={analysis}
+          evidence={analysisData.evidence}
+          reviews={analysisData.reviews}
           content={content.kanban}
           voiceLabels={content.sentiment.labels}
         />

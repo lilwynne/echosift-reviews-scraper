@@ -1,29 +1,70 @@
-import type { AnalysisResult } from "@/lib/analysis-types";
+"use client";
+
+import { useMemo, useState } from "react";
+import type {
+  AnalysisResult,
+  EvidenceMap,
+  ReviewEvidence
+} from "@/lib/analysis-types";
 import { LocaleContent } from "@/lib/mock-data";
 
 type PriorityKanbanProps = {
   analysis: AnalysisResult;
+  evidence: EvidenceMap;
+  reviews: ReviewEvidence[];
   content: LocaleContent["kanban"];
   voiceLabels: LocaleContent["sentiment"]["labels"];
 };
 
+type EvidenceCard = {
+  id: string;
+  title: string;
+  summary: string;
+  count: string;
+  priority: string;
+  evidenceIds: string[];
+};
+
+function getReviewMeta(review: ReviewEvidence) {
+  return [
+    review.source,
+    typeof review.rating === "number" ? `${review.rating}/5` : undefined,
+    review.date,
+    review.author
+  ]
+    .filter(Boolean)
+    .join(" / ");
+}
+
 export function PriorityKanban({
   analysis,
+  evidence,
+  reviews,
   content,
   voiceLabels
 }: PriorityKanbanProps) {
+  const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
+  const reviewsById = useMemo(
+    () =>
+      new Map(
+        reviews.map((review) => [review.snippetId, review] as const)
+      ),
+    [reviews]
+  );
   const columns = content.columns.map((column, columnIndex) => {
     if (columnIndex === 0) {
       return {
         ...column,
         cards: analysis.deepInsights.highFreqPainPoints.map((painPoint, index) => ({
+          id: `pain-point-${index}`,
           title: painPoint,
           summary:
             index === 0
               ? analysis.typicalVoices.negative
               : analysis.coreMetrics.signalCluster,
           count: String(analysis.coreMetrics.highValueSignals),
-          priority: index === 0 ? "P0" : "P1"
+          priority: index === 0 ? "P0" : "P1",
+          evidenceIds: evidence.painPoints[index] ?? []
         }))
       };
     }
@@ -32,13 +73,15 @@ export function PriorityKanban({
       return {
         ...column,
         cards: analysis.deepInsights.featureRequests.map((featureRequest, index) => ({
+          id: `feature-request-${index}`,
           title: featureRequest,
           summary:
             index === 0
               ? analysis.typicalVoices.positive
               : analysis.coreMetrics.positiveFocus,
           count: `${analysis.coreMetrics.positiveRatio}%`,
-          priority: index === 0 ? "High" : "Medium"
+          priority: index === 0 ? "High" : "Medium",
+          evidenceIds: evidence.featureRequests[index] ?? []
         }))
       };
     }
@@ -47,22 +90,28 @@ export function PriorityKanban({
       ...column,
       cards: [
         {
+          id: "voice-positive",
           title: voiceLabels.positive,
           summary: analysis.typicalVoices.positive,
           count: voiceLabels.positive,
-          priority: "Positive"
+          priority: "Positive",
+          evidenceIds: evidence.typicalVoices.positive
         },
         {
+          id: "voice-neutral",
           title: voiceLabels.neutral,
           summary: analysis.typicalVoices.neutral,
           count: voiceLabels.neutral,
-          priority: "Neutral"
+          priority: "Neutral",
+          evidenceIds: evidence.typicalVoices.neutral
         },
         {
+          id: "voice-negative",
           title: voiceLabels.negative,
           summary: analysis.typicalVoices.negative,
           count: voiceLabels.negative,
-          priority: "Negative"
+          priority: "Negative",
+          evidenceIds: evidence.typicalVoices.negative
         }
       ]
     };
@@ -105,9 +154,15 @@ export function PriorityKanban({
             </div>
 
             <div className="space-y-3">
-              {column.cards.map((card) => (
+              {column.cards.map((card: EvidenceCard) => {
+                const isExpanded = expandedCardId === card.id;
+                const cardReviews = card.evidenceIds
+                  .map((id) => reviewsById.get(id))
+                  .filter((review): review is ReviewEvidence => Boolean(review));
+
+                return (
                 <article
-                  key={card.title}
+                  key={card.id}
                   className="rounded-lg border border-white/10 bg-slate-950/50 p-4 shadow-sm"
                 >
                   <div className="mb-3 flex items-start justify-between gap-3">
@@ -125,13 +180,45 @@ export function PriorityKanban({
                     </span>
                     <button
                       type="button"
+                      onClick={() =>
+                        setExpandedCardId(isExpanded ? null : card.id)
+                      }
+                      aria-expanded={isExpanded}
                       className="text-xs font-semibold text-cyan-200 transition hover:text-cyan-100"
                     >
                       {content.evidence}
                     </button>
                   </div>
+                  {isExpanded && cardReviews.length > 0 && (
+                    <div className="mt-3 space-y-3 border-t border-white/10 pt-3">
+                      {cardReviews.map((review) => (
+                        <figure
+                          key={review.snippetId}
+                          className="rounded-lg border border-white/10 bg-white/[0.04] p-3"
+                        >
+                          <blockquote className="text-xs leading-6 text-slate-300">
+                            &ldquo;{review.text}&rdquo;
+                          </blockquote>
+                          <figcaption className="mt-3 flex flex-col gap-2 text-[11px] font-medium text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+                            <span>{getReviewMeta(review)}</span>
+                            {review.sourceUrl && (
+                              <a
+                                href={review.sourceUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-cyan-200 transition hover:text-cyan-100"
+                              >
+                                #{review.reviewIndex}
+                              </a>
+                            )}
+                          </figcaption>
+                        </figure>
+                      ))}
+                    </div>
+                  )}
                 </article>
-              ))}
+                );
+              })}
             </div>
           </div>
         ))}

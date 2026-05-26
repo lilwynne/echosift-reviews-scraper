@@ -30,12 +30,19 @@ const sampleAnalysis = {
   },
   deepInsights: {
     highFreqPainPoints: ["跨端上下文断裂", "移动端 diff 不完整", "通知不及时"],
-    featureRequests: ["同步任务状态", "展示完整 diff", "增强通知稳定性"]
+    featureRequests: ["同步任务状态", "展示完整 diff", "增强通知稳定性"],
+    painPointEvidenceReviewIndexes: [[2], [3], [1]],
+    featureRequestEvidenceReviewIndexes: [[2], [3], [1]]
   },
   typicalVoices: {
     positive: "在外面也能看任务进度很方便。",
     neutral: "从桌面切到 iPad 后需要重新确认上下文。",
     negative: "手机上看不到完整 diff。"
+  },
+  typicalVoiceEvidenceReviewIndexes: {
+    positive: [1],
+    neutral: [2],
+    negative: [3]
   }
 };
 
@@ -83,6 +90,8 @@ test("analyzeFeedback calls SiliconFlow with default model and parses JSON", asy
   const result = await analyzeFeedback("用户评论原文");
 
   assert.equal(result.coreMetrics.totalReviews, 438);
+  assert.deepEqual(result.deepInsights.painPointEvidenceReviewIndexes[0], [2]);
+  assert.deepEqual(result.typicalVoiceEvidenceReviewIndexes.negative, [3]);
   assert.deepEqual(capturedOptions, {
     baseURL: SILICONFLOW_BASE_URL,
     apiKey: "siliconflow-test-key"

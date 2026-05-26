@@ -188,7 +188,7 @@ export function createAnalysisCacheKey(url: string, language: Language) {
     .digest("hex")
     .slice(0, 32);
 
-  return `analysis:v1:${hash}`;
+  return `analysis:v2:${hash}`;
 }
 
 export function __resetApiGuardsForTest() {

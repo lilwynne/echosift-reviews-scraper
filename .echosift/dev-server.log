@@ -1,0 +1,29 @@
+
+> feedbackai-mvp@0.1.0 dev
+> next dev -H 127.0.0.1 -p 3000
+
+  ▲ Next.js 14.2.35
+  - Local:        http://127.0.0.1:3000
+  - Network:      http://127.0.0.1:3000
+  - Environments: .env.local
+
+ ✓ Starting...
+ ✓ Ready in 2.8s
+ ○ Compiling / ...
+ ✓ Compiled / in 2.6s (2395 modules)
+ GET / 200 in 1090ms
+ ○ Compiling /api/analyze ...
+ ✓ Compiled /api/analyze in 1412ms (2193 modules)
+ POST /api/analyze 400 in 1590ms
+ GET / 200 in 176ms
+[ANALYZE_TIMING] {
+  source: 'app-store',
+  scrapeMs: 920,
+  analysisMs: 16762,
+  totalMs: 17683,
+  reviewCount: 100,
+  maxReviews: 100,
+  reviewTextMaxChars: 1200
+}
+ POST /api/analyze 200 in 18128ms
+[?25h

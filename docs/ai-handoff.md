@@ -10,6 +10,7 @@ The frontend prototype and UI are considered confirmed by the user. Important co
 - Recent backend work implemented server-side review ingestion and API routes. The Product Hunt path now uses the official Product Hunt API v2 GraphQL endpoint.
 - Latest backend work added SiliconFlow/OpenAI-compatible AI analysis via `lib/ai-analysis.ts`. The `/api/analyze` route now returns the raw AI analysis schema under `analysis` instead of mock dashboard fields.
 - Latest frontend work wires the homepage analysis form to `POST /api/analyze` and renders the returned `analysis` schema in the Dashboard instead of mock result data.
+- Latest evidence work returns normalized real review snippets from `/api/analyze` and maps dashboard evidence buttons to those snippets. The AI only returns review indexes; the backend resolves those indexes against the fetched reviews before responding.
 - Latest ingestion fix supports App Store URLs without an embedded `id{APP_ID}` segment, such as `https://apps.apple.com/cn/app/soul/`, by resolving the app slug through Apple Search before fetching Apple RSS reviews.
 - Latest performance work optimized Product Hunt analysis latency. The slow path was `/api/analyze` fetching up to `REVIEWS_MAX_REVIEWS=100` comments before sending the full comment text to AI. `/api/analyze` now uses the analysis-specific `ANALYSIS_MAX_REVIEWS` default of 50 and trims each review text to `ANALYSIS_REVIEW_TEXT_MAX_CHARS` default of 1200 characters before calling SiliconFlow.
 - The old Product Hunt crawler/deployment path has been removed from this repo. There is no Apify actor directory, actor deploy script, or actor GitHub workflow left in the project.
@@ -66,15 +67,16 @@ http://127.0.0.1:3000
   - Dashboard localization/icon source of truth, but not the source of analysis result values.
   - Contains lucide icon component references in the frontend mock data.
 - `lib/analysis-types.ts`
-  - Shared frontend types for `AnalysisResult` and `AnalyzeApiResponse`.
+  - Shared frontend types for `AnalysisResult`, `AnalyzeApiResponse`, real review snippets, and evidence mappings.
 - `components/Dashboard.tsx`
-  - Receives the full analyze response and passes `analysis` into dashboard subcomponents.
+  - Receives the full analyze response and passes `analysis`, `reviews`, and `evidence` into dashboard subcomponents.
 - `components/KpiCards.tsx`
   - Renders KPI cards from `analysis.insightPreview` and `analysis.coreMetrics`.
 - `components/SentimentChart.tsx`
   - Renders the pie and single-result trend chart from `analysis.emotionDistribution`.
 - `components/PriorityKanban.tsx`
   - Renders pain points, feature requests, and typical voices from `analysis.deepInsights` and `analysis.typicalVoices`.
+  - Evidence buttons expand inline inside each card and show real normalized review snippets from `/api/analyze`.
 - `app/api/analyze/route.ts`
   - Backend API route for analysis.
   - Validates URL/language, calls `fetchReviews(url, { maxReviews })` with the analysis-specific max review count, formats normalized reviews as capped text, then calls `analyzeFeedback(...)`.
@@ -135,6 +137,7 @@ Implementation details:
 - Sends formatted review text as the `user` message.
 - Forces JSON mode with `response_format: { type: "json_object" }`.
 - Parses `choices[0].message.content` with `JSON.parse()` and returns the JavaScript object directly.
+- The prompt asks the AI to return review index arrays for pain points, feature requests, and typical voices. These indexes refer to the numbered `#1`, `#2`, `#3` review blocks in the user message.
 - On missing API key, API failure, empty content, or parse failure, logs full context with `console.error("[AI_ANALYSIS_FAILED]", ...)` and throws `new Error("AI_ANALYSIS_FAILED")`.
 
 Analyze response includes:
@@ -143,7 +146,8 @@ Analyze response includes:
 - `language`
 - `scrapeSource`
 - `reviewCount`
-- `reviews`
+- `reviews` with normalized real review snippets, not provider raw items
+- `evidence` mapping dashboard cards to review snippet ids
 - `analysis.insightPreview`
 - `analysis.coreMetrics`
 - `analysis.emotionDistribution`
@@ -180,7 +184,32 @@ Success response shape:
   "language": "zh-CN",
   "scrapeSource": "app-store",
   "reviewCount": 100,
-  "reviews": [],
+  "reviews": [
+    {
+      "snippetId": "app-store:review-1:1",
+      "reviewIndex": 1,
+      "id": "review-1",
+      "source": "app-store",
+      "sourceUrl": "https://example.com/review-1",
+      "productName": "Example App",
+      "title": "Useful update",
+      "text": "The original review text.",
+      "author": "Ada",
+      "authorUsername": "ada",
+      "rating": 5,
+      "date": "2026-05-26T00:00:00Z",
+      "votes": 3
+    }
+  ],
+  "evidence": {
+    "painPoints": [["app-store:review-1:1"]],
+    "featureRequests": [["app-store:review-1:1"]],
+    "typicalVoices": {
+      "positive": ["app-store:review-1:1"],
+      "neutral": ["app-store:review-1:1"],
+      "negative": ["app-store:review-1:1"]
+    }
+  },
   "analysis": {
     "insightPreview": {},
     "coreMetrics": {},

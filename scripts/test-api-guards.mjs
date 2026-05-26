@@ -31,6 +31,25 @@ const sampleAnalysisResponse = {
   language: "zh-CN",
   scrapeSource: "app-store",
   reviewCount: 1,
+  reviews: [
+    {
+      snippetId: "app-store:review-1:1",
+      reviewIndex: 1,
+      id: "review-1",
+      source: "app-store",
+      text: "通知有时延迟。",
+      rating: 2
+    }
+  ],
+  evidence: {
+    painPoints: [["app-store:review-1:1"]],
+    featureRequests: [["app-store:review-1:1"]],
+    typicalVoices: {
+      positive: ["app-store:review-1:1"],
+      neutral: ["app-store:review-1:1"],
+      negative: ["app-store:review-1:1"]
+    }
+  },
   analysis: {
     insightPreview: {
       comprehensiveScore: 90,
@@ -50,12 +69,19 @@ const sampleAnalysisResponse = {
     },
     deepInsights: {
       highFreqPainPoints: ["通知偶发延迟"],
-      featureRequests: ["提升通知稳定性"]
+      featureRequests: ["提升通知稳定性"],
+      painPointEvidenceReviewIndexes: [[1]],
+      featureRequestEvidenceReviewIndexes: [[1]]
     },
     typicalVoices: {
       positive: "速度很快。",
       neutral: "整体还行。",
       negative: "通知有时延迟。"
+    },
+    typicalVoiceEvidenceReviewIndexes: {
+      positive: [1],
+      neutral: [1],
+      negative: [1]
     }
   }
 };
@@ -172,7 +198,7 @@ test("analysis cache key normalizes url and includes language", () => {
     "en"
   );
 
-  assert.match(left, /^analysis:v1:[a-f0-9]{32}$/);
+  assert.match(left, /^analysis:v2:[a-f0-9]{32}$/);
   assert.equal(left, right);
   assert.notEqual(left, otherLanguage);
   assert.equal(
