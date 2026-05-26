@@ -32,3 +32,5 @@ EchoSift 是一个免费、轻量的用户评价分析工具。用户粘贴 Prod
 - 目前前端不依赖真实模型切换。
 - `POST /api/analyze` 请求体为 `{ url, language }`；前端不直接暴露模型选择。
 - 真实端到端测试需要有效 `SILICONFLOW_API_KEY`；Product Hunt 链接还需要 `PRODUCT_HUNT_API_TOKEN`。
+- `.gitignore` 已按用途增加注释，并忽略本地缓存/工具产物目录，例如 `.echosift/`、`.playwright-cli/`、`.cache/` 和 `.npm-cache/`。
+- `.echosift/` 和 `.playwright-cli/` 已通过 `git rm --cached` 停止跟踪；本地文件仍可保留，但后续不应再提交或 push。

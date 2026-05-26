@@ -14,6 +14,7 @@ The frontend prototype and UI are considered confirmed by the user. Important co
 - Latest ingestion fix supports App Store URLs without an embedded `id{APP_ID}` segment, such as `https://apps.apple.com/cn/app/soul/`, by resolving the app slug through Apple Search before fetching Apple RSS reviews.
 - Latest performance work optimized Product Hunt analysis latency. The slow path was `/api/analyze` fetching up to `REVIEWS_MAX_REVIEWS=100` comments before sending the full comment text to AI. `/api/analyze` now uses the analysis-specific `ANALYSIS_MAX_REVIEWS` default of 50 and trims each review text to `ANALYSIS_REVIEW_TEXT_MAX_CHARS` default of 1200 characters before calling SiliconFlow.
 - The old Product Hunt crawler/deployment path has been removed from this repo. There is no Apify actor directory, actor deploy script, or actor GitHub workflow left in the project.
+- Latest repository hygiene work added commented `.gitignore` sections and ignores local cache/tool output folders such as `.echosift/`, `.playwright-cli/`, `.cache/`, and `.npm-cache/`. `.echosift/` and `.playwright-cli/` were removed from the Git index with `git rm --cached`, so existing local files remain on disk but future pushes should not include them.
 
 The local dev server was last started with:
 
@@ -84,6 +85,8 @@ http://127.0.0.1:3000
   - Returns `analysis` with the raw SiliconFlow model result. It no longer returns `dashboard`, `kpis`, `sentiment`, `trendData`, or `kanban`.
 - `app/api/reviews/route.ts`
   - Backend API route for testing raw review ingestion.
+- `.gitignore`
+  - Ignores dependencies, build output, local environment files, package-manager logs, macOS metadata, and local cache/tool output folders including `.echosift/` and `.playwright-cli/`.
 - `lib/ai-analysis.ts`
   - SiliconFlow/OpenAI-compatible analysis helper.
   - Exports `analyzeFeedback(reviewsText, modelType)`.

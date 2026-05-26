@@ -1,12 +1,26 @@
-node_modules
-.next
-out
-dist
+# Dependencies
+node_modules/
+
+# Next.js and build output
+.next/
+out/
+dist/
 actors/*/dist
 actors/*/storage
-.npm-cache
+
+# Local cache folders and generated tool artifacts
+.npm-cache/
+.cache/
+.echosift/
+.playwright-cli/
+
+# Local environment files
 .env*.local
+
+# Package manager logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# macOS metadata
 .DS_Store
