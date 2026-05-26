@@ -1,0 +1,17 @@
+<svg width="96" height="96" viewBox="0 0 96 96" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="10" y="10" width="76" height="76" rx="22" fill="#020617"/>
+  <rect x="10" y="10" width="76" height="76" rx="22" stroke="#22D3EE" stroke-opacity="0.34" stroke-width="3"/>
+  <g filter="url(#glow)">
+    <path d="M29 50C34 50 34 38 39 38C44 38 44 62 49 62C54 62 54 34 59 34C64 34 64 50 69 50" stroke="#67E8F9" stroke-width="5" stroke-linecap="round"/>
+    <path d="M29 50C34 50 34 58 39 58C44 58 44 43 49 43C54 43 54 56 59 56C64 56 64 50 69 50" stroke="#10B981" stroke-width="3" stroke-linecap="round" stroke-opacity="0.82"/>
+  </g>
+  <defs>
+    <filter id="glow" x="16" y="21" width="66" height="54" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+      <feGaussianBlur in="BackgroundImageFix" stdDeviation="2"/>
+      <feComposite in2="SourceAlpha" operator="in" result="effect1_backgroundBlur_1_1"/>
+      <feGaussianBlur stdDeviation="3" result="effect2_foregroundBlur_1_1"/>
+      <feBlend mode="normal" in="SourceGraphic" in2="effect2_foregroundBlur_1_1" result="shape"/>
+    </filter>
+  </defs>
+</svg>

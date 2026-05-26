@@ -1,4 +1,12 @@
-# EchoSift
+<h1 align="center">
+  <a href="https://echosift.online/">EchoSift</a>
+</h1>
+
+<p align="center">
+  <a href="https://echosift.online/">
+    <img alt="EchoSift logo" src="./public/readme/echosift-logo.svg" width="88">
+  </a>
+</p>
 
 <p align="center">
   Lightweight AI feedback analysis for Product Hunt, App Store, and Google Play.
@@ -36,11 +44,11 @@ This project was built with a Vibe Coding workflow: AI-assisted generation was u
 
 ## Screenshots
 
-> Replace the placeholders below with real screenshots before publishing.
-
-![EchoSift Home](link-to-home-screenshot)
-
-![EchoSift Analysis Dashboard](link-to-dashboard-screenshot)
+<p align="center">
+  <a href="https://echosift.online/">
+    <img alt="EchoSift home page screenshot" src="./public/readme/echosift-home.png">
+  </a>
+</p>
 
 ## Tech Stack
 

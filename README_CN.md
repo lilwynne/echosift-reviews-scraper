@@ -1,4 +1,12 @@
-# EchoSift
+<h1 align="center">
+  <a href="https://echosift.online/">EchoSift</a>
+</h1>
+
+<p align="center">
+  <a href="https://echosift.online/">
+    <img alt="EchoSift logo" src="./public/readme/echosift-logo.svg" width="88">
+  </a>
+</p>
 
 <p align="center">
   轻量筛出 Product Hunt、App Store 和 Google Play 用户评价里的真实信号。
@@ -36,11 +44,11 @@ EchoSift 是一个轻量级 Web 应用，用于把公开产品反馈转化为可
 
 ## 截图
 
-> 发布前请将以下占位内容替换为真实截图。
-
-![EchoSift 首页](link-to-home-screenshot)
-
-![EchoSift 分析仪表盘](link-to-dashboard-screenshot)
+<p align="center">
+  <a href="https://echosift.online/">
+    <img alt="EchoSift 首页截图" src="./public/readme/echosift-home.png">
+  </a>
+</p>
 
 ## 技术栈
 
