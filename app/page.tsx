@@ -4,33 +4,47 @@ import { useEffect, useState } from "react";
 import { Dashboard } from "@/components/Dashboard";
 import { Header } from "@/components/Header";
 import { HeroAnalyzer } from "@/components/HeroAnalyzer";
-import { LoadingState } from "@/components/LoadingState";
 import { ProductShowcase } from "@/components/ProductShowcase";
 import { UseCases } from "@/components/UseCases";
-import { AuthModal } from "@/components/AuthModal";
-import {
-  AnalysisModel,
-  Language,
-  analysisModels,
-  localizedContent
-} from "@/lib/mock-data";
+import type { AnalyzeApiResponse } from "@/lib/analysis-types";
+import { Language, localizedContent } from "@/lib/mock-data";
 
-type AnalysisStatus = "idle" | "loading" | "result";
-type AuthMode = "login" | "signup";
+const errorCopy: Record<
+  Language,
+  {
+    emptyInput: string;
+    failure: string;
+  }
+> = {
+  "zh-CN": {
+    emptyInput: "请输入 Product Hunt、App Store 或 Google Play 产品链接。",
+    failure: "分析失败，请重试"
+  },
+  "zh-TW": {
+    emptyInput: "請輸入 Product Hunt、App Store 或 Google Play 產品連結。",
+    failure: "分析失敗，請重試"
+  },
+  en: {
+    emptyInput: "Enter a Product Hunt, App Store, or Google Play product link.",
+    failure: "Analysis failed. Please retry."
+  }
+};
 
 export default function Home() {
-  const [selectedModel, setSelectedModel] = useState<AnalysisModel>(
-    analysisModels[0].id
-  );
   const [language, setLanguage] = useState<Language>("zh-CN");
-  const [productUrl, setProductUrl] = useState("");
-  const [status, setStatus] = useState<AnalysisStatus>("idle");
+  const [inputText, setInputText] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [analysisData, setAnalysisData] = useState<AnalyzeApiResponse | null>(
+    null
+  );
   const [loadingStep, setLoadingStep] = useState(0);
-  const [authMode, setAuthMode] = useState<AuthMode | null>(null);
   const content = localizedContent[language];
+  const errors = errorCopy[language];
+  const status = isLoading ? "loading" : analysisData ? "result" : "idle";
 
   useEffect(() => {
-    if (status !== "loading") {
+    if (!isLoading) {
       return;
     }
 
@@ -40,27 +54,76 @@ export default function Home() {
         Math.min(current + 1, content.loading.messages.length - 1)
       );
     }, 1200);
-    const finishTimer = window.setTimeout(() => {
-      setStatus("result");
-    }, 3800);
 
     return () => {
       window.clearInterval(stepTimer);
-      window.clearTimeout(finishTimer);
     };
-  }, [content.loading.messages.length, status]);
+  }, [content.loading.messages.length, isLoading]);
 
-  const handleAnalyze = () => {
-    if (!productUrl.trim()) {
+  useEffect(() => {
+    if (!error) {
       return;
     }
 
-    setStatus("loading");
+    const toastTimer = window.setTimeout(() => {
+      setError(null);
+    }, 3600);
+
+    return () => {
+      window.clearTimeout(toastTimer);
+    };
+  }, [error]);
+
+  const handleAnalyze = async () => {
+    const trimmedInput = inputText.trim();
+
+    if (!trimmedInput) {
+      setError(errors.emptyInput);
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    setAnalysisData(null);
+
+    try {
+      const response = await fetch("/api/analyze", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          url: trimmedInput,
+          language
+        })
+      });
+
+      const data = (await response.json()) as AnalyzeApiResponse;
+
+      if (!response.ok) {
+        throw new Error("ANALYSIS_FAILED");
+      }
+
+      setAnalysisData(data);
+    } catch {
+      setError(errors.failure);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleReset = () => {
-    setStatus("idle");
+    setError(null);
+    setIsLoading(false);
+    setAnalysisData(null);
     setLoadingStep(0);
+  };
+
+  const handleInputChange = (value: string) => {
+    setInputText(value);
+    if (error) {
+      setError(null);
+    }
   };
 
   return (
@@ -69,40 +132,40 @@ export default function Home() {
         language={language}
         content={content.header}
         onLanguageChange={setLanguage}
-        onAuthOpen={setAuthMode}
       />
 
       <HeroAnalyzer
-        productUrl={productUrl}
-        selectedModel={selectedModel}
-        language={language}
+        productUrl={inputText}
         content={content.hero}
-        isLoading={status === "loading"}
-        onUrlChange={setProductUrl}
-        onModelChange={setSelectedModel}
+        loadingContent={content.loading}
+        status={status}
+        loadingStep={loadingStep}
+        resultContent={
+          analysisData && !isLoading ? (
+            <Dashboard
+              analysisData={analysisData}
+              content={content}
+              language={language}
+              onReset={handleReset}
+            />
+          ) : undefined
+        }
+        onUrlChange={handleInputChange}
         onAnalyze={handleAnalyze}
       />
 
       <ProductShowcase content={content.showcase} />
-      {status === "loading" && (
-        <LoadingState step={loadingStep} content={content.loading} />
-      )}
-      {status === "result" && (
-        <Dashboard
-          productUrl={productUrl}
-          selectedModel={selectedModel}
-          language={language}
-          content={content}
-          onReset={handleReset}
-        />
+      {error && (
+        <div
+          role="alert"
+          className="fixed right-4 top-4 z-50 w-[calc(100%-2rem)] max-w-xs rounded-lg border border-orange-300/30 bg-slate-950/95 px-4 py-3 shadow-[0_24px_80px_rgba(0,0,0,0.42)] backdrop-blur-xl sm:right-6 sm:top-6"
+        >
+          <p className="text-sm font-semibold leading-6 text-orange-100">
+            {error}
+          </p>
+        </div>
       )}
       <UseCases content={content.useCases} />
-      <AuthModal
-        mode={authMode}
-        content={content.auth}
-        onModeChange={setAuthMode}
-        onClose={() => setAuthMode(null)}
-      />
     </div>
   );
 }

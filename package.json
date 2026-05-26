@@ -7,13 +7,18 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test:review-ingestion": "node --experimental-strip-types --test scripts/test-review-ingestion.mjs"
+    "test": "npm run test:review-ingestion && npm run test:api-guards && npm run test:ai-analysis",
+    "test:review-ingestion": "node --experimental-strip-types --test scripts/test-review-ingestion.mjs",
+    "test:api-guards": "node --experimental-strip-types --test scripts/test-api-guards.mjs",
+    "test:ai-analysis": "node --experimental-strip-types --test scripts/test-ai-analysis.mjs"
   },
   "dependencies": {
     "autoprefixer": "^10.4.20",
+    "framer-motion": "^12.40.0",
     "google-play-scraper": "^10.1.2",
     "lucide-react": "^0.468.0",
     "next": "^14.2.35",
+    "openai": "^6.39.0",
     "postcss": "^8.4.41",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

@@ -26,7 +26,7 @@ export function UseCases({ content }: UseCasesProps) {
         {content.personas.map((persona) => (
           <article
             key={persona.role}
-            className="rounded-xl border border-line bg-white/10 p-5 shadow-sm backdrop-blur-xl"
+            className="rounded-lg border border-line bg-white/10 p-5 shadow-sm backdrop-blur-xl"
           >
             <div className="mb-5 flex items-center justify-between gap-3">
               <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-slate-300">

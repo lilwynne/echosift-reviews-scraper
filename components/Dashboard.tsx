@@ -1,32 +1,35 @@
-import {
-  AnalysisModel,
-  Language,
-  LocaleContent,
-  getModelLabel
-} from "@/lib/mock-data";
+import { LocaleContent } from "@/lib/mock-data";
 import { KpiCards } from "@/components/KpiCards";
 import { PriorityKanban } from "@/components/PriorityKanban";
 import { SentimentChart } from "@/components/SentimentChart";
+import type { AnalyzeApiResponse } from "@/lib/analysis-types";
+import type { Language } from "@/lib/mock-data";
 
 type DashboardProps = {
-  productUrl: string;
-  selectedModel: AnalysisModel;
-  language: Language;
+  analysisData: AnalyzeApiResponse;
   content: LocaleContent;
+  language: Language;
   onReset: () => void;
 };
 
+const reviewCountLabel: Record<Language, string> = {
+  "zh-CN": "条评价",
+  "zh-TW": "則評價",
+  en: "reviews"
+};
+
 export function Dashboard({
-  productUrl,
-  selectedModel,
-  language,
+  analysisData,
   content,
+  language,
   onReset
 }: DashboardProps) {
+  const { analysis } = analysisData;
+
   return (
-    <main
+    <section
       id="dashboard"
-      className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8"
+      className="mt-4 w-full max-w-6xl text-left"
     >
       <div className="mb-5 flex flex-col justify-between gap-4 rounded-xl border border-line bg-white/10 p-5 shadow-sm backdrop-blur-xl sm:flex-row sm:items-center">
         <div className="min-w-0">
@@ -38,8 +41,9 @@ export function Dashboard({
           </h2>
           <p className="mt-2 truncate text-sm text-muted">
             {content.dashboard.sourceLabel}：
-            {productUrl || "https://www.producthunt.com/products/feedbackai"} ·{" "}
-            {content.dashboard.modelLabel}：{getModelLabel(selectedModel, language)}
+            {analysisData.sourceUrl} · {analysisData.scrapeSource} ·{" "}
+            {analysisData.reviewCount} {reviewCountLabel[language]} ·{" "}
+            {content.dashboard.modeLabel}
           </p>
         </div>
         <button
@@ -52,10 +56,18 @@ export function Dashboard({
       </div>
 
       <div className="space-y-4">
-        <KpiCards items={content.kpis} />
-        <SentimentChart content={content.sentiment} />
-        <PriorityKanban content={content.kanban} />
+        <KpiCards analysis={analysis} content={content} />
+        <SentimentChart
+          analysis={analysis}
+          content={content.sentiment}
+          language={language}
+        />
+        <PriorityKanban
+          analysis={analysis}
+          content={content.kanban}
+          voiceLabels={content.sentiment.labels}
+        />
       </div>
-    </main>
+    </section>
   );
 }

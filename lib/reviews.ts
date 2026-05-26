@@ -1,4 +1,5 @@
 import gplayModule from "google-play-scraper";
+import { APP_STORE_HEADERS, GOOGLE_PLAY_HEADERS } from "./http-headers.ts";
 
 export type ReviewSource = "product-hunt" | "app-store" | "google-play";
 
@@ -54,6 +55,10 @@ export type FetchReviewsFailure = {
 
 export type FetchReviewsResult = FetchReviewsSuccess | FetchReviewsFailure;
 
+export type FetchReviewsOptions = {
+  maxReviews?: number;
+};
+
 type ProductHuntConfig = {
   source: "product-hunt";
   provider: "product-hunt-graphql";
@@ -66,6 +71,7 @@ type AppStoreConfig = {
   provider: "apple-rss";
   appId: string;
   country: string;
+  appSlug?: string;
 };
 
 type GooglePlayConfig = {
@@ -78,14 +84,35 @@ type GooglePlayConfig = {
 
 type SourceConfig = ProductHuntConfig | AppStoreConfig | GooglePlayConfig;
 type JsonRecord = Record<string, unknown>;
+type GooglePlayReviewsOptions = {
+  appId: string;
+  sort: number;
+  num: number;
+  lang: string;
+  country: string;
+  throttle: number;
+  requestOptions: {
+    headers: typeof GOOGLE_PLAY_HEADERS;
+  };
+};
+type GooglePlayReviewsResult = {
+  data?: unknown[];
+};
+type GooglePlayModuleWithRuntimeOptions = typeof gplayModule & {
+  reviews: (
+    options: GooglePlayReviewsOptions
+  ) => Promise<GooglePlayReviewsResult>;
+};
 
 const DEFAULT_MAX_REVIEWS = 100;
-const DEFAULT_REQUEST_TIMEOUT_MS = 120_000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+const DEFAULT_GOOGLE_PLAY_SCRAPER_THROTTLE = 10;
 const APP_STORE_PAGE_SIZE = 50;
 const APP_STORE_MAX_PAGES = 10;
 const PRODUCT_HUNT_GRAPHQL_ENDPOINT =
   "https://api.producthunt.com/v2/api/graphql";
 const PRODUCT_HUNT_COMMENTS_PAGE_SIZE = 50;
+const APPLE_SEARCH_ENDPOINT = "https://itunes.apple.com/search";
 
 type ProductHuntGraphqlUser = {
   username?: string;
@@ -135,6 +162,17 @@ type ProductHuntGraphqlPayload = {
   }>;
 };
 
+type AppleSearchResult = {
+  trackId?: number;
+  trackName?: string;
+  bundleId?: string;
+};
+
+type AppleSearchPayload = {
+  resultCount?: number;
+  results?: AppleSearchResult[];
+};
+
 const PRODUCT_HUNT_POST_COMMENTS_QUERY = `
   query ProductHuntPostComments($slug: String!, $first: Int!, $after: String) {
     post(slug: $slug) {
@@ -181,10 +219,30 @@ function getMaxReviews() {
   return getPositiveIntegerEnv("REVIEWS_MAX_REVIEWS", DEFAULT_MAX_REVIEWS);
 }
 
+function resolveMaxReviews(options?: FetchReviewsOptions) {
+  if (
+    typeof options?.maxReviews !== "number" ||
+    !Number.isFinite(options.maxReviews)
+  ) {
+    return getMaxReviews();
+  }
+
+  const maxReviews = Math.floor(options.maxReviews);
+
+  return maxReviews > 0 ? maxReviews : getMaxReviews();
+}
+
 function getRequestTimeoutMs() {
   return getPositiveIntegerEnv(
     "REVIEWS_REQUEST_TIMEOUT_MS",
     DEFAULT_REQUEST_TIMEOUT_MS
+  );
+}
+
+function getGooglePlayScraperThrottle() {
+  return getPositiveIntegerEnv(
+    "GOOGLE_PLAY_SCRAPER_THROTTLE",
+    DEFAULT_GOOGLE_PLAY_SCRAPER_THROTTLE
   );
 }
 
@@ -287,6 +345,16 @@ function reviewFetchFailedFailure(
   };
 }
 
+function invalidReviewSourceUrlFailure(message: string): FetchReviewsFailure {
+  return {
+    ok: false,
+    error: {
+      code: "INVALID_REVIEW_SOURCE_URL",
+      message
+    }
+  };
+}
+
 function friendlyNetworkError(error: unknown): FetchReviewsFailure {
   if (isTimeoutError(error)) {
     return {
@@ -314,6 +382,33 @@ function isTimeoutError(error: unknown) {
   );
 }
 
+function isGooglePlayBlockedError(error: unknown) {
+  if (!isRecord(error) && !(error instanceof Error)) {
+    return false;
+  }
+
+  const status =
+    isRecord(error) && typeof error.status === "number" ? error.status : undefined;
+  const message = error instanceof Error ? error.message : String(error);
+
+  return (
+    status === 429 ||
+    status === 503 ||
+    /429|503|captcha|blocked|too many requests|rate limit/i.test(message)
+  );
+}
+
+function googlePlayScrapeBlockedFailure(): FetchReviewsFailure {
+  return {
+    ok: false,
+    error: {
+      code: "GOOGLE_PLAY_SCRAPE_BLOCKED",
+      message:
+        "Google Play 暂时限制了评论抓取请求，请稍后重试或降低抓取频率。"
+    }
+  };
+}
+
 function getAppStoreCountry(parsedUrl: URL) {
   const firstPathSegment = parsedUrl.pathname
     .split("/")
@@ -328,6 +423,26 @@ function getAppStoreCountry(parsedUrl: URL) {
 function getAppStoreAppId(parsedUrl: URL) {
   const idMatch = parsedUrl.pathname.match(/\/id(\d+)(?:[/?#]|$)/i);
   return idMatch?.[1];
+}
+
+function getAppStoreSlug(parsedUrl: URL) {
+  const pathParts = parsedUrl.pathname.split("/").filter(Boolean);
+  const appIndex = pathParts.findIndex((part) => part.toLowerCase() === "app");
+  const slug = appIndex >= 0 ? pathParts[appIndex + 1] : undefined;
+
+  if (!slug?.trim()) {
+    return undefined;
+  }
+
+  try {
+    return decodeURIComponent(slug).trim();
+  } catch {
+    return slug.trim();
+  }
+}
+
+function formatAppStoreSearchTerm(appSlug: string) {
+  return appSlug.replace(/-/g, " ");
 }
 
 function normalizeLocalePart(value: string | null, fallback: string) {
@@ -361,7 +476,7 @@ function getSourceConfig(url: string): SourceConfig | FetchReviewsFailure {
     const slug = getProductHuntSlug(parsedUrl);
 
     if (!slug) {
-      return reviewFetchFailedFailure(
+      return invalidReviewSourceUrlFailure(
         "Product Hunt 链接中没有找到产品 slug，请使用 /products/{slug} 格式的链接。"
       );
     }
@@ -376,15 +491,19 @@ function getSourceConfig(url: string): SourceConfig | FetchReviewsFailure {
 
   if (hostname === "apps.apple.com") {
     const appId = getAppStoreAppId(parsedUrl);
+    const appSlug = getAppStoreSlug(parsedUrl);
 
-    if (!appId) {
-      return reviewFetchFailedFailure("App Store 链接中没有找到应用 ID。");
+    if (!appId && !appSlug) {
+      return invalidReviewSourceUrlFailure(
+        "App Store 链接中没有找到应用名称或应用 ID。"
+      );
     }
 
     return {
       source: "app-store",
       provider: "apple-rss",
-      appId,
+      appId: appId ?? "",
+      appSlug,
       country: getAppStoreCountry(parsedUrl)
     };
   }
@@ -393,7 +512,7 @@ function getSourceConfig(url: string): SourceConfig | FetchReviewsFailure {
     const appId = parsedUrl.searchParams.get("id")?.trim();
 
     if (!appId) {
-      return reviewFetchFailedFailure("Google Play 链接中没有找到应用 ID。");
+      return invalidReviewSourceUrlFailure("Google Play 链接中没有找到应用 ID。");
     }
 
     return {
@@ -579,6 +698,37 @@ async function readJsonError(response: Response) {
   return undefined;
 }
 
+async function resolveAppStoreAppId(sourceConfig: AppStoreConfig) {
+  if (sourceConfig.appId) {
+    return sourceConfig.appId;
+  }
+
+  if (!sourceConfig.appSlug) {
+    return undefined;
+  }
+
+  const endpoint = new URL(APPLE_SEARCH_ENDPOINT);
+  endpoint.searchParams.set("term", formatAppStoreSearchTerm(sourceConfig.appSlug));
+  endpoint.searchParams.set("country", sourceConfig.country);
+  endpoint.searchParams.set("entity", "software");
+  endpoint.searchParams.set("limit", "1");
+
+  const response = await fetchWithTimeout(endpoint, {
+    headers: APP_STORE_HEADERS
+  });
+
+  if (!response.ok) {
+    throw new Error(`Apple Search request failed with HTTP ${response.status}.`);
+  }
+
+  const payload = (await response.json()) as AppleSearchPayload;
+  const trackId = payload.results?.[0]?.trackId;
+
+  return typeof trackId === "number" && Number.isFinite(trackId)
+    ? String(trackId)
+    : undefined;
+}
+
 async function fetchWithTimeout(url: URL | string, init?: RequestInit) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), getRequestTimeoutMs());
@@ -642,7 +792,8 @@ async function fetchProductHuntGraphqlPage(
 
 async function fetchProductHuntReviews(
   url: string,
-  sourceConfig: ProductHuntConfig
+  sourceConfig: ProductHuntConfig,
+  maxReviews: number
 ): Promise<FetchReviewsResult> {
   if (!getProductHuntApiToken()) {
     return {
@@ -655,7 +806,6 @@ async function fetchProductHuntReviews(
     };
   }
 
-  const maxReviews = getMaxReviews();
   const first = Math.min(PRODUCT_HUNT_COMMENTS_PAGE_SIZE, maxReviews);
   const rawItems: unknown[] = [];
   const comments: ProductHuntGraphqlComment[] = [];
@@ -723,9 +873,9 @@ async function fetchProductHuntReviews(
 
 async function fetchAppStoreReviews(
   url: string,
-  sourceConfig: AppStoreConfig
+  sourceConfig: AppStoreConfig,
+  maxReviews: number
 ): Promise<FetchReviewsResult> {
-  const maxReviews = getMaxReviews();
   const rawItems: unknown[] = [];
   const reviews: NormalizedReview[] = [];
   const pageLimit = Math.min(
@@ -734,14 +884,20 @@ async function fetchAppStoreReviews(
   );
 
   try {
+    const appId = await resolveAppStoreAppId(sourceConfig);
+
+    if (!appId) {
+      return invalidReviewSourceUrlFailure(
+        "App Store 链接中没有找到可抓取评论的应用 ID。请使用包含 id 数字的完整 App Store 链接。"
+      );
+    }
+
     for (let page = 1; page <= pageLimit && reviews.length < maxReviews; page += 1) {
       const endpoint = new URL(
-        `https://itunes.apple.com/${sourceConfig.country}/rss/customerreviews/page=${page}/id=${sourceConfig.appId}/sortby=mostrecent/json`
+        `https://itunes.apple.com/${sourceConfig.country}/rss/customerreviews/page=${page}/id=${appId}/sortby=mostrecent/json`
       );
       const response = await fetchWithTimeout(endpoint, {
-        headers: {
-          Accept: "application/json"
-        }
+        headers: APP_STORE_HEADERS
       });
 
       if (!response.ok) {
@@ -776,19 +932,24 @@ async function fetchAppStoreReviews(
 
 async function fetchGooglePlayReviews(
   url: string,
-  sourceConfig: GooglePlayConfig
+  sourceConfig: GooglePlayConfig,
+  maxReviews: number
 ): Promise<FetchReviewsResult> {
   try {
-    const gplay = gplayModule;
+    const gplay = gplayModule as GooglePlayModuleWithRuntimeOptions;
     const result = await gplay.reviews({
       appId: sourceConfig.appId,
       sort: 2,
-      num: getMaxReviews(),
+      num: maxReviews,
       lang: sourceConfig.lang,
-      country: sourceConfig.country
+      country: sourceConfig.country,
+      throttle: getGooglePlayScraperThrottle(),
+      requestOptions: {
+        headers: GOOGLE_PLAY_HEADERS
+      }
     });
     const rawItems = Array.isArray(result.data) ? result.data : [];
-    const reviews = normalizeGooglePlayReviews(rawItems).slice(0, getMaxReviews());
+    const reviews = normalizeGooglePlayReviews(rawItems).slice(0, maxReviews);
 
     return {
       ok: true,
@@ -810,24 +971,33 @@ async function fetchGooglePlayReviews(
       };
     }
 
+    if (isGooglePlayBlockedError(error)) {
+      return googlePlayScrapeBlockedFailure();
+    }
+
     return reviewFetchFailedFailure("Google Play 评论抓取失败，请检查链接后稍后重试。");
   }
 }
 
-export async function fetchReviews(url: string): Promise<FetchReviewsResult> {
+export async function fetchReviews(
+  url: string,
+  options?: FetchReviewsOptions
+): Promise<FetchReviewsResult> {
   const sourceConfig = getSourceConfig(url.trim());
 
   if (isFetchReviewsFailure(sourceConfig)) {
     return sourceConfig;
   }
 
+  const maxReviews = resolveMaxReviews(options);
+
   if (sourceConfig.source === "product-hunt") {
-    return fetchProductHuntReviews(url, sourceConfig);
+    return fetchProductHuntReviews(url, sourceConfig, maxReviews);
   }
 
   if (sourceConfig.source === "app-store") {
-    return fetchAppStoreReviews(url, sourceConfig);
+    return fetchAppStoreReviews(url, sourceConfig, maxReviews);
   }
 
-  return fetchGooglePlayReviews(url, sourceConfig);
+  return fetchGooglePlayReviews(url, sourceConfig, maxReviews);
 }

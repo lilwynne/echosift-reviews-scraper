@@ -6,6 +6,13 @@ type ReviewsRequestBody = {
   url?: unknown;
 };
 
+function isReviewsApiEnabled() {
+  return (
+    process.env.NODE_ENV !== "production" ||
+    process.env.REVIEWS_API_DEBUG_ENABLED === "true"
+  );
+}
+
 function jsonError(code: string, message: string, status: number) {
   return NextResponse.json(
     {
@@ -32,6 +39,10 @@ function isValidUrl(value: unknown): value is string {
 }
 
 export async function POST(request: Request) {
+  if (!isReviewsApiEnabled()) {
+    return jsonError("NOT_FOUND", "Not found.", 404);
+  }
+
   let body: ReviewsRequestBody;
 
   try {

@@ -1,32 +1,58 @@
 import { NextResponse } from "next/server";
+import { analyzeFeedback } from "@/lib/ai-analysis";
 import {
-  AnalysisModel,
-  Language,
-  analysisModels,
-  languages,
-  localizedContent,
-  trendData
-} from "@/lib/mock-data";
-import { fetchReviews } from "@/lib/reviews";
+  getCachedAnalysis,
+  setCachedAnalysis
+} from "@/lib/analysis-cache";
 import { statusFromScrapeErrorCode } from "@/lib/api-errors";
+import {
+  checkRateLimit,
+  createAnalysisCacheKey,
+  getClientIp,
+  getRequestPathname,
+  tryAcquireAnalysisSlot
+} from "@/lib/api-guards";
+import type { AnalyzeApiResponse } from "@/lib/analysis-types";
+import { Language, languages } from "@/lib/mock-data";
+import { fetchReviews, type NormalizedReview } from "@/lib/reviews";
 
 type AnalyzeRequestBody = {
   url?: unknown;
-  model?: unknown;
   language?: unknown;
 };
 
-type SerializableIcon = {
-  displayName?: string;
-  name?: string;
-};
-
-const validModels = new Set<AnalysisModel>(
-  analysisModels.map((model) => model.id)
-);
 const validLanguages = new Set<Language>(
   languages.map((language) => language.code)
 );
+const DEFAULT_ANALYSIS_MAX_REVIEWS = 100;
+const DEFAULT_ANALYSIS_REVIEW_TEXT_MAX_CHARS = 1200;
+
+function getPositiveIntegerEnv(name: string, fallback: number) {
+  const value = Number.parseInt(process.env[name] ?? "", 10);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function getAnalysisMaxReviews() {
+  return getPositiveIntegerEnv(
+    "ANALYSIS_MAX_REVIEWS",
+    DEFAULT_ANALYSIS_MAX_REVIEWS
+  );
+}
+
+function getAnalysisReviewTextMaxChars() {
+  return getPositiveIntegerEnv(
+    "ANALYSIS_REVIEW_TEXT_MAX_CHARS",
+    DEFAULT_ANALYSIS_REVIEW_TEXT_MAX_CHARS
+  );
+}
+
+function elapsedMs(start: number) {
+  return Math.round(performance.now() - start);
+}
+
+function trimTextForAnalysis(text: string, maxChars: number) {
+  return text.length > maxChars ? `${text.slice(0, maxChars)}...` : text;
+}
 
 function jsonError(
   code: string,
@@ -57,9 +83,46 @@ function isValidUrl(value: unknown): value is string {
   }
 }
 
-function serializeIcon(icon: SerializableIcon) {
-  const iconName = icon.displayName ?? icon.name ?? "MessageSquare";
-  return iconName === "TriangleAlert" ? "AlertTriangle" : iconName;
+function formatReviewForAnalysis(
+  review: NormalizedReview,
+  index: number,
+  maxTextChars: number
+) {
+  const lines = [`#${index + 1}`];
+
+  lines.push(`source: ${review.source}`);
+
+  if (review.productName) {
+    lines.push(`product: ${review.productName}`);
+  }
+
+  if (typeof review.rating === "number") {
+    lines.push(`rating: ${review.rating}`);
+  }
+
+  if (review.title) {
+    lines.push(`title: ${review.title}`);
+  }
+
+  if (review.date) {
+    lines.push(`date: ${review.date}`);
+  }
+
+  lines.push(`text: ${trimTextForAnalysis(review.text, maxTextChars)}`);
+
+  return lines.join("\n");
+}
+
+function buildReviewsText(reviews: NormalizedReview[], maxTextChars: number) {
+  if (reviews.length === 0) {
+    return "未抓取到有效评论。";
+  }
+
+  return reviews
+    .map((review, index) =>
+      formatReviewForAnalysis(review, index, maxTextChars)
+    )
+    .join("\n\n---\n\n");
 }
 
 export async function POST(request: Request) {
@@ -75,10 +138,6 @@ export async function POST(request: Request) {
     return jsonError("INVALID_URL", "请输入有效的产品链接。", 400);
   }
 
-  if (typeof body.model !== "string" || !validModels.has(body.model as AnalysisModel)) {
-    return jsonError("INVALID_MODEL", "请选择有效的分析模型。", 400);
-  }
-
   if (
     typeof body.language !== "string" ||
     !validLanguages.has(body.language as Language)
@@ -86,47 +145,105 @@ export async function POST(request: Request) {
     return jsonError("INVALID_LANGUAGE", "请选择有效的返回语言。", 400);
   }
 
-  const model = body.model as AnalysisModel;
   const language = body.language as Language;
-  const content = localizedContent[language];
-  const scrapeResult = await fetchReviews(body.url);
+  const rateLimit = checkRateLimit({
+    identifier: getClientIp(request.headers),
+    pathname: getRequestPathname(request)
+  });
 
-  if (!scrapeResult.ok) {
+  if (!rateLimit.allowed) {
+    return jsonError("RATE_LIMITED", "请求过于频繁，请稍后再试。", 429);
+  }
+
+  const cacheKey = createAnalysisCacheKey(body.url, language);
+  const cachedAnalysis = getCachedAnalysis(cacheKey);
+
+  if (cachedAnalysis) {
+    return NextResponse.json(cachedAnalysis);
+  }
+
+  const analysisSlot = tryAcquireAnalysisSlot();
+
+  if (!analysisSlot.ok) {
     return jsonError(
-      scrapeResult.error.code,
-      scrapeResult.error.message,
-      statusFromScrapeErrorCode(scrapeResult.error.code)
+      "ANALYSIS_CONCURRENCY_LIMITED",
+      "当前分析请求较多，请稍后重试。",
+      429
     );
   }
 
-  return NextResponse.json({
-    sourceUrl: body.url,
-    model,
-    language,
-    scrapeSource: scrapeResult.source,
-    reviewCount: scrapeResult.count,
-    reviews: scrapeResult.reviews,
-    dashboard: content.dashboard,
-    kpis: content.kpis.map((item) => ({
-      label: item.label,
-      value: item.value,
-      detail: item.detail,
-      accent: item.accent,
-      icon: serializeIcon(item.icon)
-    })),
-    sentiment: content.sentiment,
-    trendData,
-    kanban: {
-      title: content.kanban.title,
-      description: content.kanban.description,
-      clustered: content.kanban.clustered,
-      evidence: content.kanban.evidence,
-      columns: content.kanban.columns.map((column) => ({
-        title: column.title,
-        tone: column.tone,
-        icon: serializeIcon(column.icon),
-        cards: column.cards
-      }))
+  try {
+    const requestStart = performance.now();
+    const analysisMaxReviews = getAnalysisMaxReviews();
+    const analysisReviewTextMaxChars = getAnalysisReviewTextMaxChars();
+    const scrapeStart = performance.now();
+    const scrapeResult = await fetchReviews(body.url, {
+      maxReviews: analysisMaxReviews
+    });
+    const scrapeMs = elapsedMs(scrapeStart);
+
+    if (!scrapeResult.ok) {
+      console.info("[ANALYZE_TIMING]", {
+        stage: "scrape_failed",
+        scrapeMs,
+        totalMs: elapsedMs(requestStart),
+        maxReviews: analysisMaxReviews,
+        reviewTextMaxChars: analysisReviewTextMaxChars
+      });
+
+      return jsonError(
+        scrapeResult.error.code,
+        scrapeResult.error.message,
+        statusFromScrapeErrorCode(scrapeResult.error.code)
+      );
     }
-  });
+
+    let analysis;
+
+    try {
+      const analysisStart = performance.now();
+      analysis = await analyzeFeedback(
+        buildReviewsText(scrapeResult.reviews, analysisReviewTextMaxChars)
+      );
+      console.info("[ANALYZE_TIMING]", {
+        source: scrapeResult.source,
+        scrapeMs,
+        analysisMs: elapsedMs(analysisStart),
+        totalMs: elapsedMs(requestStart),
+        reviewCount: scrapeResult.count,
+        maxReviews: analysisMaxReviews,
+        reviewTextMaxChars: analysisReviewTextMaxChars
+      });
+    } catch {
+      console.info("[ANALYZE_TIMING]", {
+        source: scrapeResult.source,
+        stage: "analysis_failed",
+        scrapeMs,
+        totalMs: elapsedMs(requestStart),
+        reviewCount: scrapeResult.count,
+        maxReviews: analysisMaxReviews,
+        reviewTextMaxChars: analysisReviewTextMaxChars
+      });
+
+      return jsonError(
+        "AI_ANALYSIS_FAILED",
+        "AI 分析服务暂时不可用，请稍后重试。",
+        502
+      );
+    }
+
+    const responseBody: AnalyzeApiResponse = {
+      sourceUrl: body.url,
+      language,
+      scrapeSource: scrapeResult.source,
+      reviewCount: scrapeResult.count,
+      analysis
+    };
+
+    setCachedAnalysis(cacheKey, responseBody);
+
+    return NextResponse.json(responseBody);
+  } finally {
+    analysisSlot.release();
+  }
 }

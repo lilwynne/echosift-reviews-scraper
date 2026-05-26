@@ -2,9 +2,9 @@
 
 ## Summary
 
-This cleanup removes the obsolete Product Hunt crawler/deployment path now that FeatureMap's Product Hunt ingestion uses the official Product Hunt API v2 GraphQL endpoint. The active multi-source review ingestion flow remains in place for Product Hunt, Apple App Store, and Google Play.
+This cleanup removes the obsolete Product Hunt crawler/deployment path now that EchoSift's Product Hunt ingestion uses the official Product Hunt API v2 GraphQL endpoint. The active multi-source review ingestion flow remains in place for Product Hunt, Apple App Store, and Google Play.
 
-The approved frontend layout and Tailwind styling were intentionally left unchanged.
+The frontend has been simplified into a lightweight free-only flow with no auth buttons and no model picker.
 
 ## What Changed
 
@@ -31,9 +31,18 @@ The approved frontend layout and Tailwind styling were intentionally left unchan
   - Product Hunt still uses `PRODUCT_HUNT_API_TOKEN`.
   - All sources still use `REVIEWS_MAX_REVIEWS` and `REVIEWS_REQUEST_TIMEOUT_MS`.
 
-- Updated user-facing loading copy:
+- Updated user-facing loading copy and branding:
   - Replaced old source-specific pipeline wording with generic review API wording.
-  - No layout, class, or component structure changes were made.
+  - Renamed the product to EchoSift across the frontend and docs.
+  - Removed auth buttons, subscription UI, and model picker from the rendered page.
+
+- Rebuilt the hero's real-time insight preview:
+  - idle placeholder card
+  - scanning glass overlay with looping scan line
+  - reveal cards with spring entrance
+  - count-up positive signal metric
+  - spring progress bars with glow edge
+  - hover spotlight effect on each card
 
 - Updated documentation:
   - `docs/ai-handoff.md`
@@ -126,6 +135,12 @@ Build output includes:
 ```
 
 Product Hunt GraphQL helper tests cover bearer-token usage, URL slug parsing, comment normalization, cursor pagination, and missing-token handling.
+
+Frontend verification:
+
+- `npm run lint`
+- `npm run build`
+- Browser pass on `http://127.0.0.1:3000` for idle, scanning, and reveal preview states
 
 ## Risks / Follow-Ups
 

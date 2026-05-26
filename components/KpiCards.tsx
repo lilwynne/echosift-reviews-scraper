@@ -1,10 +1,37 @@
+import { HeartPulse, MessageSquare, Tags } from "lucide-react";
+import type { AnalysisResult } from "@/lib/analysis-types";
 import { LocaleContent } from "@/lib/mock-data";
 
 type KpiCardsProps = {
-  items: LocaleContent["kpis"];
+  analysis: AnalysisResult;
+  content: LocaleContent;
 };
 
-export function KpiCards({ items }: KpiCardsProps) {
+export function KpiCards({ analysis, content }: KpiCardsProps) {
+  const items = [
+    {
+      label: content.kpis[0].label,
+      value: String(analysis.coreMetrics.totalReviews),
+      detail: analysis.insightPreview.coreSummary,
+      accent: content.kpis[0].accent,
+      icon: MessageSquare
+    },
+    {
+      label: content.kpis[1].label,
+      value: `${analysis.insightPreview.comprehensiveScore}/100`,
+      detail: analysis.coreMetrics.positiveFocus,
+      accent: content.kpis[1].accent,
+      icon: HeartPulse
+    },
+    {
+      label: content.kpis[2].label,
+      value: `${analysis.coreMetrics.highValueSignals}`,
+      detail: analysis.coreMetrics.signalCluster,
+      accent: content.kpis[2].accent,
+      icon: Tags
+    }
+  ];
+
   return (
     <div className="grid gap-4 md:grid-cols-3">
       {items.map((item) => (

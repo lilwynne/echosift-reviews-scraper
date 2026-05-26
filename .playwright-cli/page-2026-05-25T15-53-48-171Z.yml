@@ -1,0 +1,195 @@
+- generic [active] [ref=e1]:
+  - alert [ref=e247]
+  - generic [ref=e488]: 0%
+  - generic [ref=e489]:
+    - banner [ref=e490]:
+      - generic [ref=e491]:
+        - generic [ref=e492]:
+          - img [ref=e496]
+          - generic [ref=e498]:
+            - paragraph [ref=e499]: EchoSift
+            - paragraph [ref=e500]: 用户评价分析与竞品调研
+        - generic [ref=e502]:
+          - generic [ref=e503]: 选择语言
+          - img
+          - combobox "选择语言" [ref=e504]:
+            - option "简体中文" [selected]
+            - option "繁體中文"
+            - option "English"
+          - img
+    - generic [ref=e505]:
+      - generic [ref=e506]:
+        - generic [ref=e507]:
+          - img [ref=e508]
+          - text: Product Hunt / App Store / Google Play 评价分析
+        - heading "EchoSift 轻量筛出用户评价里的真实信号" [level=1] [ref=e510]
+        - paragraph [ref=e511]: 粘贴一个产品链接，EchoSift 会用免费的轻量流程汇总情绪、痛点、功能请求和竞品差异。无需账号、无需选择模型，打开就能分析。
+        - generic [ref=e513]:
+          - generic [ref=e514]:
+            - img
+            - textbox "在此粘贴 Product Hunt 或商店链接..." [ref=e515]: https://example.com
+          - button "开始分析" [ref=e516] [cursor=pointer]:
+            - text: 开始分析
+            - img [ref=e517]
+        - generic [ref=e520]:
+          - generic [ref=e521]:
+            - img [ref=e522]
+            - text: 权限信任
+          - generic [ref=e524]:
+            - img [ref=e525]
+            - text: 移动端衔接
+          - generic [ref=e527]:
+            - img [ref=e528]
+            - text: 任务进度
+      - generic [ref=e533]:
+        - generic [ref=e534]:
+          - generic [ref=e535]:
+            - paragraph [ref=e536]: Codex 示例洞察预览
+            - paragraph [ref=e537]: 先看到情绪、痛点和需求优先级，再开始分析
+          - generic [ref=e538]:
+            - paragraph [ref=e539]: 综合情绪
+            - generic [ref=e540]:
+              - generic [ref=e541]: "84"
+              - generic [ref=e542]: /100
+            - paragraph [ref=e543]: 当前示例来源的情绪得分
+        - generic [ref=e544]:
+          - generic [ref=e545]:
+            - generic [ref=e547]:
+              - generic [ref=e548]:
+                - paragraph [ref=e549]: Codex 示例分析
+                - heading "Codex" [level=3] [ref=e550]
+              - generic [ref=e551]:
+                - paragraph [ref=e552]: 模拟近 30 天评论
+                - paragraph [ref=e553]: 示例数据
+            - tablist "选择示例来源" [ref=e554]:
+              - tab "Product Hunt" [selected] [ref=e555] [cursor=pointer]
+              - tab "App Store" [ref=e556] [cursor=pointer]
+              - tab "Google Play" [ref=e557] [cursor=pointer]
+            - paragraph [ref=e558]: 这份 Product Hunt 示例报告只基于一个 Product Hunt 产品链接生成。评论集中称赞 Codex 能理解项目上下文、改动前会解释计划，也提醒新用户需要更直观的权限说明。
+            - generic [ref=e559]:
+              - generic [ref=e560]:
+                - paragraph [ref=e561]: 模拟评价
+                - paragraph [ref=e562]: "642"
+                - paragraph [ref=e563]: 来自当前 Product Hunt 链接
+              - generic [ref=e564]:
+                - paragraph [ref=e565]: 高价值信号
+                - paragraph [ref=e566]: "238"
+                - paragraph [ref=e567]: 可聚类为痛点、需求和购买阻力
+              - generic [ref=e568]:
+                - paragraph [ref=e569]: 正向占比
+                - paragraph [ref=e570]: 68%
+                - paragraph [ref=e571]: 围绕开发效率与代码解释能力
+            - generic [ref=e577]:
+              - generic [ref=e578]:
+                - generic [ref=e581]: 正向
+                - paragraph [ref=e582]: 68%
+              - generic [ref=e583]:
+                - generic [ref=e586]: 中立
+                - paragraph [ref=e587]: 21%
+              - generic [ref=e588]:
+                - generic [ref=e591]: 负向
+                - paragraph [ref=e592]: 11%
+          - generic [ref=e593]:
+            - article [ref=e594]:
+              - generic [ref=e595]:
+                - generic [ref=e596]:
+                  - paragraph [ref=e597]: Product Hunt
+                  - paragraph [ref=e598]: 642 条评价
+                - generic [ref=e599]: 86%
+              - paragraph [ref=e602]: 独立开发者称赞终端协作、代码审查和快速修复流程。
+            - generic [ref=e603]:
+              - generic [ref=e604]:
+                - heading "高频痛点" [level=4] [ref=e605]
+                - generic [ref=e606]:
+                  - paragraph [ref=e609]: 审批权限与回滚说明不够直观
+                  - paragraph [ref=e612]: 首次运行前对会修改哪些文件缺少预期
+                  - paragraph [ref=e615]: 长任务等待期间的进度反馈偏少
+              - generic [ref=e616]:
+                - heading "功能请求" [level=4] [ref=e617]
+                - generic [ref=e618]:
+                  - paragraph [ref=e621]: 改动前自动列出影响范围
+                  - paragraph [ref=e624]: 一键生成 PR 评论草稿和测试摘要
+                  - paragraph [ref=e627]: 保存项目记忆快照，便于下次继续
+            - generic [ref=e628]:
+              - figure [ref=e629]:
+                - generic [ref=e630]:
+                  - generic [ref=e631]: Product Hunt
+                  - generic [ref=e632]: 正向
+                - blockquote [ref=e633]: “Codex 像一个会先说明计划的资深搭档，能把小修复和测试补齐交给它。”
+              - figure [ref=e634]:
+                - generic [ref=e635]:
+                  - generic [ref=e636]: Product Hunt
+                  - generic [ref=e637]: 中立
+                - blockquote [ref=e638]: “它的效率很高，但我希望在授权前更清楚知道哪些文件会被改动。”
+              - figure [ref=e639]:
+                - generic [ref=e640]:
+                  - generic [ref=e641]: Product Hunt
+                  - generic [ref=e642]: 负向
+                - blockquote [ref=e643]: “大仓库任务跑很久时，我想知道它卡在哪一步，以及是否可以安全暂停。”
+        - generic [ref=e644]:
+          - paragraph [ref=e645]: 支持 Product Hunt、App Store、Google Play
+          - generic [ref=e646]:
+            - img [ref=e647]
+            - generic [ref=e649]: Codex 示例报告已载入
+    - generic [ref=e650]:
+      - generic [ref=e651]:
+        - generic [ref=e652]:
+          - generic [ref=e653]:
+            - paragraph [ref=e654]: 像筛子一样轻，把噪声留在外面
+            - heading "一个免费入口，完成评价筛选、痛点归类和竞品观察" [level=2] [ref=e655]
+            - paragraph [ref=e656]: EchoSift 把评价来源、需求聚类和竞品线索放进一条轻量工作流，减少设置成本，让用户更快看到可执行信号。
+          - generic [ref=e657]:
+            - generic [ref=e658]:
+              - paragraph [ref=e659]: 1,284
+              - paragraph [ref=e660]: 模拟评价
+            - generic [ref=e661]:
+              - paragraph [ref=e662]: "426"
+              - paragraph [ref=e663]: 高价值反馈
+            - generic [ref=e664]:
+              - paragraph [ref=e665]: "7.8"
+              - paragraph [ref=e666]: 情感得分
+        - generic [ref=e667]:
+          - paragraph [ref=e668]: 支持的评价来源
+          - generic [ref=e669]:
+            - generic [ref=e670]: Product Hunt
+            - generic [ref=e671]: App Store
+            - generic [ref=e672]: Google Play
+      - generic [ref=e673]:
+        - article [ref=e674]:
+          - img [ref=e676]
+          - heading "全渠道评价归并" [level=3] [ref=e680]
+          - paragraph [ref=e681]: 统一收集不同平台评论，保留来源与原始证据。
+        - article [ref=e682]:
+          - img [ref=e684]
+          - heading "AI 需求聚类" [level=3] [ref=e688]
+          - paragraph [ref=e689]: 把重复反馈压缩为 Bug、功能请求和体验吐槽。
+        - article [ref=e690]:
+          - img [ref=e692]
+          - heading "竞品差异对比" [level=3] [ref=e696]
+          - paragraph [ref=e697]: 把用户反馈和竞品表现放在一起，快速看出差异和机会点。
+    - alert [ref=e734]:
+      - paragraph [ref=e735]: 分析失败，请重试
+    - generic [ref=e698]:
+      - generic [ref=e699]:
+        - paragraph [ref=e700]: 为高频产品决策场景而设计
+        - heading "运营人员、小企业主和产品经理可以在同一页面上对齐" [level=2] [ref=e701]
+        - paragraph [ref=e702]: EchoSift 面向轻量协作，把评价证据、需求主题和竞品信息组织到一起，方便快速决策。
+      - generic [ref=e703]:
+        - article [ref=e704]:
+          - generic [ref=e705]:
+            - generic [ref=e706]: 小企业主
+            - img [ref=e708]
+          - heading "快速判断用户最在意什么" [level=3] [ref=e713]
+          - paragraph [ref=e714]: 不用逐条读评论，直接看到高频请求、吐槽点和转化阻力。
+        - article [ref=e715]:
+          - generic [ref=e716]:
+            - generic [ref=e717]: 产品经理
+            - img [ref=e719]
+          - heading "把用户原话转成分析依据" [level=3] [ref=e723]
+          - paragraph [ref=e724]: 每张卡片都保留提及量和证据入口，方便写 PRD 和做判断。
+        - article [ref=e725]:
+          - generic [ref=e726]:
+            - generic [ref=e727]: 运营人员
+            - img [ref=e729]
+          - heading "识别影响口碑和转化的关键摩擦" [level=3] [ref=e732]
+          - paragraph [ref=e733]: 用情绪趋势和痛点标签判断哪些问题会影响留存、推荐和成交。

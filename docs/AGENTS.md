@@ -1,37 +1,34 @@
-# 角色
-你是一个资深的全栈工程师和 UX 设计师。请帮我开发一个微型 SaaS 的前端高保真原型（MVP 阶段）。
+# EchoSift Handoff
 
-# 项目背景
-产品名称：「FeedbackAI - 用户评价全景分析器」。
-核心使用场景：用户（通常是独立开发者或产品经理）在输入框粘贴一个 Product Hunt、App Store 或 Google Play 的产品链接，系统抓取评价，并通过 AI 分析，最终生成一个直观的用户需求与情绪数据看板。
+## 产品定位
 
-# 技术栈要求
-- 框架：Next.js (App Router) + React
-- 样式：Tailwind CSS (要求设计风格现代、极简、类似主流的 SaaS 产品)
-- 图标：lucide-react
-- 图表库：recharts (用于生成趋势图)
-- 页面：单页面应用 (Single Page Application)，所有交互在同一个页面完成。
+EchoSift 是一个免费、轻量的用户评价分析工具。用户粘贴 Product Hunt、App Store 或 Google Play 链接后，可以通过 `/api/analyze` 发起真实评论抓取和 AI 分析，并看到情绪、痛点、需求请求和典型用户原话。
 
-# 核心 UI 模块规划（请逐步实现以下布局）：
+## 当前前端状态
 
-1. 顶部导航栏 (Header)
-- 左侧：产品 Logo 和名称 (FeedbackAI)。
-- 右侧：一个下拉菜单，用于选择底层分析模型（选项包括：DeepSeek-V3 (免费), Claude 3.5 Sonnet (Pro), GPT-4o (Pro)）。
+- 页面采用深色模式和冷色渐变背景。
+- 品牌已更新为 EchoSift。
+- 右上角仅保留语言切换和“永久免费”状态。
+- 已移除登录、注册、模型切换和订阅入口。
+- Hero 区只保留链接输入和“开始分析”按钮。
+- Dashboard 已绑定 `/api/analyze` 返回的真实 `analysis` 数据；`lib/mock-data.ts` 仍提供本地化文案、标签和图标。
 
-2. 核心输入区 (Hero Section)
-- 一句有吸引力的 Slogan，例如："一键洞察用户真实心声，将零散评价转化为产品迭代路线图"。
-- 一个宽大的输入框，带有 placeholder："在此粘贴 Product Hunt 或商店链接..."。
-- 一个突出的「开始分析」按钮。
+## 关键文件
 
-3. 加载状态交互 (Loading State)
-- 当点击「开始分析」后，隐藏分析按钮，显示一个优雅的加载动画，并伴随文字提示模拟处理过程（例如交替显示："正在调取评价接口抓取评论..." -> "正在使用大模型进行情感降噪..." -> "正在生成结构化看板..."）。
+- `app/page.tsx`
+- `app/layout.tsx`
+- `components/Header.tsx`
+- `components/EchoSiftLogo.tsx`
+- `components/HeroAnalyzer.tsx`
+- `components/Dashboard.tsx`
+- `lib/analysis-types.ts`
+- `lib/mock-data.ts`
+- `docs/ai-handoff.md`
+- `docs/issue.md`
+- `docs/pr-description.md`
 
-4. 数据看板区 (Dashboard - 需使用 Mock 数据展示)
-- 区域 A：关键指标卡片 (KPI Cards)。包含：总评价数、整体情感得分 (1-10分)、最核心痛点标签。
-- 区域 B：用户情绪环形图或趋势图 (使用 recharts，展示正面、中立、负面评价的占比)。
-- 区域 C：需求优先级看板 (Kanban Board)。分为三列："🔥 严重 Bug"、"✨ 新功能请求 (Feature Request)"、"💬 体验吐槽"。每列展示 2-3 条模拟的总结卡片。
+## 备注
 
-# 代码生成要求
-1. 请直接生成完整的代码，确保在本地 `npm run dev` 后可以直接运行看效果。
-2. 所有的图表和看板请注入合理的 Mock 数据（假数据），以便我直观地看到 UI 效果。
-3. 代码结构要清晰，组件化拆分合理。
+- 目前前端不依赖真实模型切换。
+- `POST /api/analyze` 请求体为 `{ url, language }`；前端不直接暴露模型选择。
+- 真实端到端测试需要有效 `SILICONFLOW_API_KEY`；Product Hunt 链接还需要 `PRODUCT_HUNT_API_TOKEN`。

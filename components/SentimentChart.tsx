@@ -11,13 +11,73 @@ import {
   XAxis,
   YAxis
 } from "recharts";
-import { LocaleContent, trendData } from "@/lib/mock-data";
+import type { AnalysisResult } from "@/lib/analysis-types";
+import { Language, LocaleContent } from "@/lib/mock-data";
 
 type SentimentChartProps = {
+  analysis: AnalysisResult;
   content: LocaleContent["sentiment"];
+  language: Language;
 };
 
-export function SentimentChart({ content }: SentimentChartProps) {
+const sentimentCopy: Record<
+  Language,
+  {
+    subtitle: (totalReviews: number) => string;
+    trendTitle: string;
+    trendSubtitle: string;
+  }
+> = {
+  "zh-CN": {
+    subtitle: (totalReviews) => `基于 ${totalReviews} 条评价聚合`,
+    trendTitle: "当前情绪分析快照",
+    trendSubtitle: "展示本次真实分析返回的正面、中立和负面占比。"
+  },
+  "zh-TW": {
+    subtitle: (totalReviews) => `基於 ${totalReviews} 則評價彙整`,
+    trendTitle: "目前情緒分析快照",
+    trendSubtitle: "展示本次真實分析返回的正向、中立和負向占比。"
+  },
+  en: {
+    subtitle: (totalReviews) => `Aggregated from ${totalReviews} reviews`,
+    trendTitle: "Current Sentiment Snapshot",
+    trendSubtitle:
+      "Shows the positive, neutral, and negative mix returned by this analysis."
+  }
+};
+
+export function SentimentChart({
+  analysis,
+  content,
+  language
+}: SentimentChartProps) {
+  const copy = sentimentCopy[language];
+  const sentimentData = [
+    {
+      name: content.labels.positive,
+      value: analysis.emotionDistribution.positive,
+      color: "#10b981"
+    },
+    {
+      name: content.labels.neutral,
+      value: analysis.emotionDistribution.neutral,
+      color: "#38bdf8"
+    },
+    {
+      name: content.labels.negative,
+      value: analysis.emotionDistribution.negative,
+      color: "#f97316"
+    }
+  ];
+  const trendData = [
+    {
+      date: "Result",
+      positive: analysis.emotionDistribution.positive,
+      neutral: analysis.emotionDistribution.neutral,
+      negative: analysis.emotionDistribution.negative
+    }
+  ];
+
   return (
     <section className="grid gap-4 lg:grid-cols-[0.85fr_1.15fr]">
       <article className="rounded-xl border border-line bg-white/10 p-5 shadow-sm backdrop-blur-xl">
@@ -26,10 +86,12 @@ export function SentimentChart({ content }: SentimentChartProps) {
             <h2 className="text-lg font-semibold text-ink">
               {content.title}
             </h2>
-            <p className="mt-1 text-sm text-muted">{content.subtitle}</p>
+            <p className="mt-1 text-sm text-muted">
+              {copy.subtitle(analysis.coreMetrics.totalReviews)}
+            </p>
           </div>
           <span className="rounded-full bg-emerald-400/10 px-3 py-1 text-sm font-semibold text-emerald-200">
-            {content.badge}
+            {content.labels.positive} {analysis.coreMetrics.positiveRatio}%
           </span>
         </div>
 
@@ -37,14 +99,14 @@ export function SentimentChart({ content }: SentimentChartProps) {
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
-                data={content.data}
+                data={sentimentData}
                 innerRadius={68}
                 outerRadius={94}
                 paddingAngle={4}
                 dataKey="value"
                 stroke="none"
               >
-                {content.data.map((entry) => (
+                {sentimentData.map((entry) => (
                   <Cell key={entry.name} fill={entry.color} />
                 ))}
               </Pie>
@@ -63,7 +125,7 @@ export function SentimentChart({ content }: SentimentChartProps) {
         </div>
 
         <div className="grid grid-cols-3 gap-2">
-          {content.data.map((item) => (
+          {sentimentData.map((item) => (
             <div key={item.name} className="rounded-lg bg-slate-950/45 p-3">
               <div className="flex items-center gap-2">
                 <span
@@ -85,10 +147,10 @@ export function SentimentChart({ content }: SentimentChartProps) {
       <article className="rounded-xl border border-line bg-white/10 p-5 shadow-sm backdrop-blur-xl">
         <div className="mb-4">
           <h2 className="text-lg font-semibold text-ink">
-            {content.trendTitle}
+            {copy.trendTitle}
           </h2>
           <p className="mt-1 text-sm text-muted">
-            {content.trendSubtitle}
+            {copy.trendSubtitle}
           </p>
         </div>
 

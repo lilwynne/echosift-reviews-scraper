@@ -7,7 +7,7 @@ type ProductShowcaseProps = {
 export function ProductShowcase({ content }: ProductShowcaseProps) {
   return (
     <section className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-      <div className="rounded-2xl border border-line bg-white/10 p-6 shadow-soft backdrop-blur-xl">
+      <div className="rounded-xl border border-line bg-white/10 p-6 shadow-soft backdrop-blur-xl">
         <div className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr] lg:items-end">
           <div>
             <p className="text-sm font-semibold text-cyan-200">
@@ -40,7 +40,7 @@ export function ProductShowcase({ content }: ProductShowcaseProps) {
             {content.platforms.map((platform) => (
               <span
                 key={platform}
-                  className="rounded-full border border-line bg-white/10 px-3 py-1 text-sm font-semibold text-slate-200"
+                className="rounded-full border border-line bg-white/10 px-3 py-1 text-sm font-semibold text-slate-200"
               >
                 {platform}
               </span>
@@ -53,7 +53,7 @@ export function ProductShowcase({ content }: ProductShowcaseProps) {
         {content.capabilities.map((item) => (
           <article
             key={item.title}
-            className="rounded-xl border border-line bg-white/10 p-5 shadow-sm backdrop-blur-xl"
+            className="rounded-lg border border-line bg-white/10 p-5 shadow-sm backdrop-blur-xl"
           >
             <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-cyan-400/10 text-cyan-200">
               <item.icon className="h-5 w-5" aria-hidden="true" />

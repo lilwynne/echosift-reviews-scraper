@@ -1,10 +1,73 @@
+import type { AnalysisResult } from "@/lib/analysis-types";
 import { LocaleContent } from "@/lib/mock-data";
 
 type PriorityKanbanProps = {
+  analysis: AnalysisResult;
   content: LocaleContent["kanban"];
+  voiceLabels: LocaleContent["sentiment"]["labels"];
 };
 
-export function PriorityKanban({ content }: PriorityKanbanProps) {
+export function PriorityKanban({
+  analysis,
+  content,
+  voiceLabels
+}: PriorityKanbanProps) {
+  const columns = content.columns.map((column, columnIndex) => {
+    if (columnIndex === 0) {
+      return {
+        ...column,
+        cards: analysis.deepInsights.highFreqPainPoints.map((painPoint, index) => ({
+          title: painPoint,
+          summary:
+            index === 0
+              ? analysis.typicalVoices.negative
+              : analysis.coreMetrics.signalCluster,
+          count: String(analysis.coreMetrics.highValueSignals),
+          priority: index === 0 ? "P0" : "P1"
+        }))
+      };
+    }
+
+    if (columnIndex === 1) {
+      return {
+        ...column,
+        cards: analysis.deepInsights.featureRequests.map((featureRequest, index) => ({
+          title: featureRequest,
+          summary:
+            index === 0
+              ? analysis.typicalVoices.positive
+              : analysis.coreMetrics.positiveFocus,
+          count: `${analysis.coreMetrics.positiveRatio}%`,
+          priority: index === 0 ? "High" : "Medium"
+        }))
+      };
+    }
+
+    return {
+      ...column,
+      cards: [
+        {
+          title: voiceLabels.positive,
+          summary: analysis.typicalVoices.positive,
+          count: voiceLabels.positive,
+          priority: "Positive"
+        },
+        {
+          title: voiceLabels.neutral,
+          summary: analysis.typicalVoices.neutral,
+          count: voiceLabels.neutral,
+          priority: "Neutral"
+        },
+        {
+          title: voiceLabels.negative,
+          summary: analysis.typicalVoices.negative,
+          count: voiceLabels.negative,
+          priority: "Negative"
+        }
+      ]
+    };
+  });
+
   return (
     <section className="rounded-xl border border-line bg-white/10 p-5 shadow-sm backdrop-blur-xl">
       <div className="mb-5 flex flex-col justify-between gap-2 sm:flex-row sm:items-end">
@@ -17,12 +80,12 @@ export function PriorityKanban({ content }: PriorityKanbanProps) {
           </p>
         </div>
         <span className="rounded-full border border-line bg-white/10 px-3 py-1 text-sm font-medium text-muted">
-          {content.clustered}
+          {analysis.coreMetrics.signalCluster}
         </span>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        {content.columns.map((column) => (
+        {columns.map((column) => (
           <div
             key={column.title}
             className={`rounded-xl border p-4 ${column.tone}`}
