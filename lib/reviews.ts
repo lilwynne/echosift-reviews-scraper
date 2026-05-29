@@ -1,5 +1,9 @@
 import gplayModule from "google-play-scraper";
-import { APP_STORE_HEADERS, GOOGLE_PLAY_HEADERS } from "./http-headers.ts";
+import {
+  APP_STORE_HEADERS,
+  APP_STORE_WEB_HEADERS,
+  GOOGLE_PLAY_HEADERS
+} from "./http-headers.ts";
 
 export type ReviewSource = "product-hunt" | "app-store" | "google-play";
 
@@ -38,7 +42,11 @@ export type FetchReviewsSuccess = {
   ok: true;
   source: ReviewSource;
   sourceUrl: string;
-  provider: "product-hunt-graphql" | "apple-rss" | "google-play-scraper";
+  provider:
+    | "product-hunt-graphql"
+    | "apple-rss"
+    | "apple-web-page"
+    | "google-play-scraper";
   product?: NormalizedProduct;
   count: number;
   reviews: NormalizedReview[];
@@ -171,6 +179,11 @@ type AppleSearchResult = {
 type AppleSearchPayload = {
   resultCount?: number;
   results?: AppleSearchResult[];
+};
+
+type AppStoreWebReviewsResult = {
+  reviews: NormalizedReview[];
+  rawItems: JsonRecord[];
 };
 
 const PRODUCT_HUNT_POST_COMMENTS_QUERY = `
@@ -311,6 +324,18 @@ function textFromHtml(html?: string) {
     ?.replace(/<[^>]*>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function decodeHtmlEntities(value: string) {
+  return value
+    .replace(/&quot;/g, "\"")
+    .replace(/&#34;/g, "\"")
+    .replace(/&#x22;/gi, "\"")
+    .replace(/&#39;/g, "'")
+    .replace(/&#x27;/gi, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
 }
 
 function invalidUrlFailure(): FetchReviewsFailure {
@@ -614,6 +639,28 @@ function getAppStoreReview(item: JsonRecord): NormalizedReview | null {
   };
 }
 
+function getAppStoreWebReview(
+  item: JsonRecord,
+  sourceUrl: string
+): NormalizedReview | null {
+  const text = stringFrom(item, ["contents"]);
+
+  if (!text) {
+    return null;
+  }
+
+  return {
+    id: stringFrom(item, ["id"]),
+    source: "app-store",
+    sourceUrl,
+    title: stringFrom(item, ["title"]),
+    text,
+    author: stringFrom(item, ["reviewerName"]),
+    rating: numberFrom(item, ["rating"]),
+    date: stringFrom(item, ["date"])
+  };
+}
+
 function normalizeAppStoreReviews(payload: unknown) {
   if (!isRecord(payload) || !isRecord(payload.feed)) {
     return [];
@@ -640,6 +687,144 @@ function normalizeAppStoreReviews(payload: unknown) {
   }
 
   return reviews;
+}
+
+function getNestedRecord(value: unknown, path: string[]) {
+  let current = value;
+
+  for (const key of path) {
+    if (Array.isArray(current)) {
+      const index = Number.parseInt(key, 10);
+
+      if (
+        !Number.isInteger(index) ||
+        index < 0 ||
+        index >= current.length
+      ) {
+        return undefined;
+      }
+
+      current = current[index];
+      continue;
+    }
+
+    if (!isRecord(current)) {
+      return undefined;
+    }
+
+    current = current[key];
+  }
+
+  return isRecord(current) ? current : undefined;
+}
+
+function parseAppStoreSerializedServerData(html: string) {
+  const match = html.match(
+    /<script\b[^>]*\bid=["']serialized-server-data["'][^>]*>([\s\S]*?)<\/script>/i
+  );
+
+  if (!match?.[1]?.trim()) {
+    return undefined;
+  }
+
+  try {
+    return JSON.parse(decodeHtmlEntities(match[1].trim())) as unknown;
+  } catch {
+    return undefined;
+  }
+}
+
+function getAppStoreWebReviewDedupKey(review: NormalizedReview) {
+  if (review.id) {
+    return `id:${review.id}`;
+  }
+
+  return `fallback:${review.title ?? ""}:${review.text}:${review.date ?? ""}`;
+}
+
+function collectAppStoreWebReviewsFromShelf(
+  shelf: unknown,
+  sourceUrl: string,
+  seenKeys: Set<string>,
+  maxReviews: number,
+  reviews: NormalizedReview[],
+  rawItems: JsonRecord[]
+) {
+  if (reviews.length >= maxReviews || !isRecord(shelf)) {
+    return;
+  }
+
+  const items = shelf.items;
+
+  if (!Array.isArray(items)) {
+    return;
+  }
+
+  for (const item of items) {
+    if (reviews.length >= maxReviews || !isRecord(item)) {
+      continue;
+    }
+
+    const reviewRecord = isRecord(item.review) ? item.review : item;
+
+    if (reviewRecord.$kind !== "Review") {
+      continue;
+    }
+
+    const review = getAppStoreWebReview(reviewRecord, sourceUrl);
+
+    if (!review) {
+      continue;
+    }
+
+    const dedupKey = getAppStoreWebReviewDedupKey(review);
+
+    if (seenKeys.has(dedupKey)) {
+      continue;
+    }
+
+    seenKeys.add(dedupKey);
+    reviews.push(review);
+    rawItems.push(reviewRecord);
+  }
+}
+
+function normalizeAppStoreWebReviews(
+  payload: unknown,
+  sourceUrl: string,
+  maxReviews: number
+): AppStoreWebReviewsResult {
+  const reviews: NormalizedReview[] = [];
+  const rawItems: JsonRecord[] = [];
+  const seenKeys = new Set<string>();
+  const pageData = getNestedRecord(payload, ["data", "0", "data"]);
+
+  if (!pageData) {
+    return { reviews, rawItems };
+  }
+
+  const shelfMapping = isRecord(pageData.shelfMapping)
+    ? pageData.shelfMapping
+    : undefined;
+
+  collectAppStoreWebReviewsFromShelf(
+    shelfMapping?.allProductReviews,
+    sourceUrl,
+    seenKeys,
+    maxReviews,
+    reviews,
+    rawItems
+  );
+  collectAppStoreWebReviewsFromShelf(
+    shelfMapping?.userProductReviews,
+    sourceUrl,
+    seenKeys,
+    maxReviews,
+    reviews,
+    rawItems
+  );
+
+  return { reviews, rawItems };
 }
 
 function getGooglePlayReview(item: JsonRecord): NormalizedReview | null {
@@ -740,6 +925,32 @@ async function fetchWithTimeout(url: URL | string, init?: RequestInit) {
     });
   } finally {
     clearTimeout(timeout);
+  }
+}
+
+async function fetchAppStoreWebReviews(
+  url: string,
+  maxReviews: number
+): Promise<AppStoreWebReviewsResult> {
+  try {
+    const response = await fetchWithTimeout(url, {
+      headers: APP_STORE_WEB_HEADERS
+    });
+
+    if (!response.ok) {
+      return { reviews: [], rawItems: [] };
+    }
+
+    const html = await response.text();
+    const payload = parseAppStoreSerializedServerData(html);
+
+    if (!payload) {
+      return { reviews: [], rawItems: [] };
+    }
+
+    return normalizeAppStoreWebReviews(payload, url, maxReviews);
+  } catch {
+    return { reviews: [], rawItems: [] };
   }
 }
 
@@ -914,6 +1125,22 @@ async function fetchAppStoreReviews(
       }
 
       reviews.push(...pageReviews);
+    }
+
+    if (reviews.length === 0) {
+      const webResult = await fetchAppStoreWebReviews(url, maxReviews);
+
+      if (webResult.reviews.length > 0) {
+        return {
+          ok: true,
+          source: sourceConfig.source,
+          sourceUrl: url,
+          provider: "apple-web-page",
+          count: webResult.reviews.length,
+          reviews: webResult.reviews,
+          rawItems: webResult.rawItems
+        };
+      }
     }
 
     return {

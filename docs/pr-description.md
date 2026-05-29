@@ -49,6 +49,20 @@ The frontend has been simplified into a lightweight free-only flow with no auth 
   - `docs/issue.md`
   - `docs/pr-description.md`
 
+- Improved Chrome extension responsiveness:
+  - Removed the content script's full-body MutationObserver and 500ms URL polling.
+  - Added event-driven SPA URL detection with a short click-debounced fallback.
+  - Added background in-flight request dedupe for repeated clicks on the same URL.
+  - Added `chrome.storage.session` success caching with an in-memory fallback.
+  - Added a 90-second analysis request timeout and clearer loading copy.
+  - Aligned `/api/analyze` default `ANALYSIS_MAX_REVIEWS` to 50.
+
+- Improved App Store ingestion coverage:
+  - Kept Apple RSS as the first review source.
+  - Added an App Store product-page fallback that parses `serialized-server-data` when RSS returns no reviews.
+  - Added `provider: "apple-web-page"` for fallback results.
+  - Added a zero-review `/api/analyze` short-circuit so empty ingestion does not spend an AI request.
+
 ## Current Environment Variables
 
 Product Hunt only:
@@ -62,6 +76,8 @@ All sources:
 ```env
 REVIEWS_MAX_REVIEWS=100
 REVIEWS_REQUEST_TIMEOUT_MS=120000
+ANALYSIS_MAX_REVIEWS=50
+ANALYSIS_REVIEW_TEXT_MAX_CHARS=1200
 ```
 
 ## API Notes
@@ -125,6 +141,8 @@ Passed locally:
 npm run test:review-ingestion
 npm run lint
 npm run build
+cd extension && npx tsc --noEmit
+cd extension && npm run build
 ```
 
 Build output includes:
@@ -140,12 +158,13 @@ Frontend verification:
 
 - `npm run lint`
 - `npm run build`
+- `npm run test:analyze-route`
 - Browser pass on `http://127.0.0.1:3000` for idle, scanning, and reveal preview states
 
 ## Risks / Follow-Ups
 
 - Live Product Hunt validation still needs to be run with a valid `PRODUCT_HUNT_API_TOKEN`.
-- Apple RSS can return empty feeds for some app/country combinations.
+- Apple RSS can return empty feeds for some app/country combinations; the App Store web fallback only uses review snippets embedded in the public product page HTML and does not paginate all historical reviews.
 - Google Play scraping is unofficial and may fail when Google changes markup or blocks the runtime network.
 - `/api/analyze` currently fails if scraping fails. For MVP demos, consider whether it should fall back to mock dashboard data.
 - Next step is to feed normalized `reviews` into the AI analysis pipeline.

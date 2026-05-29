@@ -68,7 +68,7 @@ This project was built with a Vibe Coding workflow: AI-assisted generation was u
 - Node.js runtime APIs
 - OpenAI JavaScript SDK configured for SiliconFlow
 - Product Hunt GraphQL API
-- Apple iTunes RSS customer reviews API
+- Apple RSS customer reviews API with App Store web page fallback
 - `google-play-scraper`
 
 ### Database
@@ -119,7 +119,7 @@ GOOGLE_PLAY_SCRAPER_THROTTLE=10
 REVIEWS_API_DEBUG_ENABLED=false
 
 # Optional analysis controls
-ANALYSIS_MAX_REVIEWS=100
+ANALYSIS_MAX_REVIEWS=50
 ANALYSIS_REVIEW_TEXT_MAX_CHARS=1200
 ANALYSIS_CACHE_TTL_SECONDS=259200
 ANALYSIS_CONCURRENCY_LIMIT=2

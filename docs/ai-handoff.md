@@ -12,7 +12,10 @@ The frontend prototype and UI are considered confirmed by the user. Important co
 - Latest frontend work wires the homepage analysis form to `POST /api/analyze` and renders the returned `analysis` schema in the Dashboard instead of mock result data.
 - Latest evidence work returns normalized real review snippets from `/api/analyze` and maps dashboard evidence buttons to those snippets. The AI only returns review indexes; the backend resolves those indexes against the fetched reviews before responding.
 - Latest ingestion fix supports App Store URLs without an embedded `id{APP_ID}` segment, such as `https://apps.apple.com/cn/app/soul/`, by resolving the app slug through Apple Search before fetching Apple RSS reviews.
+- Latest App Store ingestion work keeps Apple RSS as the first source and falls back to parsing the App Store product page's `serialized-server-data` reviews when RSS returns an empty feed.
+- Latest empty-review performance fix makes `/api/analyze` return the standard empty analysis result immediately when ingestion returns zero reviews, instead of spending an AI request on empty input.
 - Latest performance work optimized Product Hunt analysis latency. The slow path was `/api/analyze` fetching up to `REVIEWS_MAX_REVIEWS=100` comments before sending the full comment text to AI. `/api/analyze` now uses the analysis-specific `ANALYSIS_MAX_REVIEWS` default of 50 and trims each review text to `ANALYSIS_REVIEW_TEXT_MAX_CHARS` default of 1200 characters before calling SiliconFlow.
+- Latest extension performance work removed the content script's full-body MutationObserver and 500ms polling, added event-driven SPA URL detection, background in-flight request dedupe, session-memory success caching, and a 90-second analysis timeout.
 - The old Product Hunt crawler/deployment path has been removed from this repo. There is no Apify actor directory, actor deploy script, or actor GitHub workflow left in the project.
 - Latest repository hygiene work added commented `.gitignore` sections and ignores local cache/tool output folders such as `.echosift/`, `.playwright-cli/`, `.cache/`, and `.npm-cache/`. `.echosift/` and `.playwright-cli/` were removed from the Git index with `git rm --cached`, so existing local files remain on disk but future pushes should not include them.
 
@@ -85,6 +88,9 @@ http://127.0.0.1:3000
   - Returns `analysis` with the raw SiliconFlow model result. It no longer returns `dashboard`, `kpis`, `sentiment`, `trendData`, or `kanban`.
 - `app/api/reviews/route.ts`
   - Backend API route for testing raw review ingestion.
+- `extension/`
+  - Chrome extension package. The content script injects the floating analyze button on supported product pages, and `background.ts` owns API calls, in-flight dedupe, success caching, and timeout-aware responses.
+  - The root `tsconfig.json` excludes this package; validate it with `cd extension && npx tsc --noEmit` and build it with `cd extension && npm run build`.
 - `.gitignore`
   - Ignores dependencies, build output, local environment files, package-manager logs, macOS metadata, and local cache/tool output folders including `.echosift/` and `.playwright-cli/`.
 - `lib/ai-analysis.ts`
@@ -287,12 +293,15 @@ Implementation details:
 - `/api/analyze` passes `ANALYSIS_MAX_REVIEWS` so Product Hunt analysis defaults to one 50-comment GraphQL page instead of two pages for the default 100-review ingestion cap.
 - Normalized Product Hunt comments include `text`, `author`, `authorUsername`, `date`, `votes`, `productName`, and `sourceUrl`.
 - Product Hunt response includes `provider: "product-hunt-graphql"` and a `product` metadata object.
-- App Store uses Apple public RSS:
+- App Store uses Apple public RSS first:
   `https://itunes.apple.com/{country}/rss/customerreviews/page={page}/id={appId}/sortby=mostrecent/json`
 - App Store URLs may include an explicit app id, for example `https://apps.apple.com/{country}/app/.../id{APP_ID}`, or a slug-only path such as `https://apps.apple.com/cn/app/soul/`.
 - For slug-only App Store URLs, `lib/reviews.ts` calls Apple Search:
   `https://itunes.apple.com/search?term={slug}&country={country}&entity=software&limit=1`
   and uses the returned `trackId` as the RSS `{appId}`.
+- If Apple RSS returns no `feed.entry` reviews, App Store falls back to fetching the original product page and parsing `<script id="serialized-server-data" type="application/json">`.
+- The web fallback extracts `Review` records from `shelfMapping.allProductReviews.items[*].review` and `shelfMapping.userProductReviews.items[*].review`, dedupes by review id, and returns `provider: "apple-web-page"`.
+- Web fallback review fields map `id`, `title`, `contents`, `rating`, `reviewerName`, and `date` into the shared `NormalizedReview` shape.
 - Google Play uses the `google-play-scraper` npm package.
 - `REVIEWS_MAX_REVIEWS` defaults to 100.
 - Request timeout uses local `AbortController`, default 120 seconds.
@@ -306,6 +315,8 @@ Implementation details:
   - `ANALYSIS_REVIEW_TEXT_MAX_CHARS=1200` caps each review body in the AI prompt.
   - `[ANALYZE_TIMING]` server logs expose scrape, analysis, and total durations.
 - `scripts/test-review-ingestion.mjs` covers the `maxReviews` override and verifies Product Hunt stops pagination when the requested limit is reached.
+- App Store ingestion tests cover RSS-first behavior, RSS-empty web fallback parsing, and missing `serialized-server-data` returning an empty result without throwing.
+- `scripts/test-analyze-route.mjs` covers the zero-review `/api/analyze` short-circuit path without requiring `SILICONFLOW_API_KEY`.
 
 Error response format:
 
@@ -484,7 +495,7 @@ AI analysis helper tests cover:
 - Product Hunt backend calls require a valid `PRODUCT_HUNT_API_TOKEN` in backend `.env.local`.
 - SiliconFlow analysis requires a valid `SILICONFLOW_API_KEY` in backend `.env.local`.
 - App Store slug-only links depend on Apple Search returning the intended first software result for the extracted slug and country.
-- App Store RSS may return an empty feed for some app/country combinations.
+- App Store RSS may return an empty feed for some app/country combinations; the backend then tries the App Store web page fallback, but that fallback only uses comments embedded in the public page HTML and does not paginate every App Store review.
 - Google Play scraping depends on public Google Play network availability and may timeout in restricted networks.
 - `POST /api/analyze` depends on scraping before model analysis. Product Hunt without `PRODUCT_HUNT_API_TOKEN` returns `MISSING_PRODUCT_HUNT_API_TOKEN`.
 - The frontend now consumes `/api/analyze`; real end-to-end tests require network access plus a valid `SILICONFLOW_API_KEY`, and Product Hunt tests also require `PRODUCT_HUNT_API_TOKEN`.
@@ -492,6 +503,6 @@ AI analysis helper tests cover:
 
 ## Recommended Next Steps
 
-1. Add API-route tests for `/api/analyze` success and `AI_ANALYSIS_FAILED` behavior.
+1. Add API-route tests for `/api/analyze` success and `AI_ANALYSIS_FAILED` behavior beyond the zero-review short-circuit test.
 2. Run live smoke tests against App Store, Google Play, and Product Hunt URLs with both required API keys present.
 3. Consider adding browser-level tests for empty input, invalid URL, loading, error, and successful dashboard rendering states.

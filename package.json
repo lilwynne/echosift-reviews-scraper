@@ -7,10 +7,11 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "npm run test:review-ingestion && npm run test:api-guards && npm run test:ai-analysis",
+    "test": "npm run test:review-ingestion && npm run test:api-guards && npm run test:ai-analysis && npm run test:analyze-route",
     "test:review-ingestion": "node --experimental-strip-types --test scripts/test-review-ingestion.mjs",
     "test:api-guards": "node --experimental-strip-types --test scripts/test-api-guards.mjs",
-    "test:ai-analysis": "node --experimental-strip-types --test scripts/test-ai-analysis.mjs"
+    "test:ai-analysis": "node --experimental-strip-types --test scripts/test-ai-analysis.mjs",
+    "test:analyze-route": "node --loader ./scripts/test-esm-loader.mjs --experimental-strip-types --test scripts/test-analyze-route.mjs"
   },
   "dependencies": {
     "autoprefixer": "^10.4.20",

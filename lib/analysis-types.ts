@@ -49,6 +49,7 @@ export type AnalyzeApiResponse = {
   sourceUrl: string;
   language: Language;
   scrapeSource: string;
+  scrapeProvider?: string;
   reviewCount: number;
   reviews: ReviewEvidence[];
   evidence: EvidenceMap;

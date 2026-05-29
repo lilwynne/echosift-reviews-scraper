@@ -19,7 +19,8 @@ import type {
   ReviewEvidence,
   ReviewSentiment
 } from "@/lib/analysis-types";
-import { Language, languages } from "@/lib/mock-data";
+import { createEmptyAnalysisResult } from "@/lib/empty-analysis";
+import { languages, type Language } from "@/lib/mock-data";
 import { fetchReviews, type NormalizedReview } from "@/lib/reviews";
 
 type AnalyzeRequestBody = {
@@ -30,7 +31,7 @@ type AnalyzeRequestBody = {
 const validLanguages = new Set<Language>(
   languages.map((language) => language.code)
 );
-const DEFAULT_ANALYSIS_MAX_REVIEWS = 100;
+const DEFAULT_ANALYSIS_MAX_REVIEWS = 50;
 const DEFAULT_ANALYSIS_REVIEW_TEXT_MAX_CHARS = 1200;
 const EVIDENCE_REVIEWS_PER_CARD = 3;
 
@@ -357,6 +358,34 @@ export async function POST(request: Request) {
     const reviews = buildReviewEvidence(scrapeResult.reviews);
     let analysis: AnalysisResult;
 
+    if (scrapeResult.count === 0) {
+      analysis = createEmptyAnalysisResult();
+
+      const responseBody: AnalyzeApiResponse = {
+        sourceUrl: body.url,
+        language,
+        scrapeSource: scrapeResult.source,
+        scrapeProvider: scrapeResult.provider,
+        reviewCount: scrapeResult.count,
+        reviews,
+        evidence: buildEvidenceMap(analysis, reviews),
+        analysis
+      };
+
+      console.info("[ANALYZE_TIMING]", {
+        source: scrapeResult.source,
+        provider: scrapeResult.provider,
+        stage: "empty_reviews",
+        scrapeMs,
+        totalMs: elapsedMs(requestStart),
+        reviewCount: scrapeResult.count,
+        maxReviews: analysisMaxReviews,
+        reviewTextMaxChars: analysisReviewTextMaxChars
+      });
+
+      return NextResponse.json(responseBody);
+    }
+
     try {
       const analysisStart = performance.now();
       analysis = await analyzeFeedback(
@@ -364,6 +393,7 @@ export async function POST(request: Request) {
       );
       console.info("[ANALYZE_TIMING]", {
         source: scrapeResult.source,
+        provider: scrapeResult.provider,
         scrapeMs,
         analysisMs: elapsedMs(analysisStart),
         totalMs: elapsedMs(requestStart),
@@ -374,6 +404,7 @@ export async function POST(request: Request) {
     } catch {
       console.info("[ANALYZE_TIMING]", {
         source: scrapeResult.source,
+        provider: scrapeResult.provider,
         stage: "analysis_failed",
         scrapeMs,
         totalMs: elapsedMs(requestStart),
@@ -393,6 +424,7 @@ export async function POST(request: Request) {
       sourceUrl: body.url,
       language,
       scrapeSource: scrapeResult.source,
+      scrapeProvider: scrapeResult.provider,
       reviewCount: scrapeResult.count,
       reviews,
       evidence: buildEvidenceMap(analysis, reviews),

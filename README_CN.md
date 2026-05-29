@@ -68,7 +68,7 @@ EchoSift 是一个轻量级 Web 应用，用于把公开产品反馈转化为可
 - Node.js runtime APIs
 - 面向 SiliconFlow 配置的 OpenAI JavaScript SDK
 - Product Hunt GraphQL API
-- Apple iTunes RSS customer reviews API
+- Apple RSS customer reviews API 与 App Store 网页评论 fallback
 - `google-play-scraper`
 
 ### 数据库
@@ -119,7 +119,7 @@ GOOGLE_PLAY_SCRAPER_THROTTLE=10
 REVIEWS_API_DEBUG_ENABLED=false
 
 # 可选：分析控制
-ANALYSIS_MAX_REVIEWS=100
+ANALYSIS_MAX_REVIEWS=50
 ANALYSIS_REVIEW_TEXT_MAX_CHARS=1200
 ANALYSIS_CACHE_TTL_SECONDS=259200
 ANALYSIS_CONCURRENCY_LIMIT=2
