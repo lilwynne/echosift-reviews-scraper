@@ -55,3 +55,26 @@ export type AnalyzeApiResponse = {
   evidence: EvidenceMap;
   analysis: AnalysisResult;
 };
+
+export type AnalyzeJobStatus =
+  | "queued"
+  | "scraping"
+  | "analyzing"
+  | "completed"
+  | "failed";
+
+export type AnalyzeJobError = {
+  code: string;
+  message: string;
+  status: number;
+};
+
+export type AnalyzeJobResponse = {
+  jobId: string;
+  status: AnalyzeJobStatus;
+  createdAt: string;
+  updatedAt: string;
+  elapsedMs: number;
+  result?: AnalyzeApiResponse;
+  error?: AnalyzeJobError;
+};

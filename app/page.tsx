@@ -1,12 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Dashboard } from "@/components/Dashboard";
 import { Header } from "@/components/Header";
 import { HeroAnalyzer } from "@/components/HeroAnalyzer";
 import { ProductShowcase } from "@/components/ProductShowcase";
 import { UseCases } from "@/components/UseCases";
-import type { AnalyzeApiResponse } from "@/lib/analysis-types";
+import type {
+  AnalyzeApiResponse,
+  AnalyzeJobResponse,
+  AnalyzeJobStatus
+} from "@/lib/analysis-types";
 import { Language, localizedContent } from "@/lib/mock-data";
 
 const errorCopy: Record<
@@ -30,6 +34,74 @@ const errorCopy: Record<
   }
 };
 
+const POLL_INTERVAL_MS = 1500;
+const MAX_POLL_ATTEMPTS = 80;
+
+function getLoadingStepForJobStatus(status: AnalyzeJobStatus) {
+  if (status === "analyzing") {
+    return 1;
+  }
+
+  if (status === "completed") {
+    return 2;
+  }
+
+  return 0;
+}
+
+function getErrorMessage(value: unknown, fallback: string) {
+  if (
+    value &&
+    typeof value === "object" &&
+    "error" in value &&
+    value.error &&
+    typeof value.error === "object" &&
+    "message" in value.error &&
+    typeof value.error.message === "string"
+  ) {
+    return value.error.message;
+  }
+
+  return fallback;
+}
+
+async function readJsonResponse<T>(response: Response, fallbackError: string) {
+  const json = (await response.json().catch(() => null)) as unknown;
+
+  if (!response.ok) {
+    throw new Error(getErrorMessage(json, fallbackError));
+  }
+
+  return json as T;
+}
+
+async function createAnalyzeJob(url: string, language: Language) {
+  const response = await fetch("/api/analyze/jobs", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      url,
+      language
+    })
+  });
+
+  return readJsonResponse<AnalyzeJobResponse>(response, "ANALYZE_JOB_FAILED");
+}
+
+async function fetchAnalyzeJob(jobId: string) {
+  const response = await fetch(`/api/analyze/jobs/${encodeURIComponent(jobId)}`);
+
+  return readJsonResponse<AnalyzeJobResponse>(response, "ANALYZE_JOB_FAILED");
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
 export default function Home() {
   const [language, setLanguage] = useState<Language>("zh-CN");
   const [inputText, setInputText] = useState("");
@@ -39,26 +111,16 @@ export default function Home() {
     null
   );
   const [loadingStep, setLoadingStep] = useState(0);
+  const activeRunId = useRef(0);
   const content = localizedContent[language];
   const errors = errorCopy[language];
   const status = isLoading ? "loading" : analysisData ? "result" : "idle";
 
   useEffect(() => {
-    if (!isLoading) {
-      return;
-    }
-
-    setLoadingStep(0);
-    const stepTimer = window.setInterval(() => {
-      setLoadingStep((current) =>
-        Math.min(current + 1, content.loading.messages.length - 1)
-      );
-    }, 1200);
-
     return () => {
-      window.clearInterval(stepTimer);
+      activeRunId.current += 1;
     };
-  }, [content.loading.messages.length, isLoading]);
+  }, []);
 
   useEffect(() => {
     if (!error) {
@@ -85,34 +147,56 @@ export default function Home() {
     setIsLoading(true);
     setError(null);
     setAnalysisData(null);
+    setLoadingStep(0);
+    activeRunId.current += 1;
+    const runId = activeRunId.current;
 
     try {
-      const response = await fetch("/api/analyze", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          url: trimmedInput,
-          language
-        })
-      });
+      let job = await createAnalyzeJob(trimmedInput, language);
 
-      const data = (await response.json()) as AnalyzeApiResponse;
-
-      if (!response.ok) {
-        throw new Error("ANALYSIS_FAILED");
+      if (activeRunId.current !== runId) {
+        return;
       }
 
-      setAnalysisData(data);
-    } catch {
-      setError(errors.failure);
+      setLoadingStep(getLoadingStepForJobStatus(job.status));
+
+      for (
+        let attempt = 0;
+        attempt < MAX_POLL_ATTEMPTS && job.status !== "completed";
+        attempt += 1
+      ) {
+        if (job.status === "failed") {
+          throw new Error(job.error?.message ?? errors.failure);
+        }
+
+        await wait(POLL_INTERVAL_MS);
+        job = await fetchAnalyzeJob(job.jobId);
+
+        if (activeRunId.current !== runId) {
+          return;
+        }
+
+        setLoadingStep(getLoadingStepForJobStatus(job.status));
+      }
+
+      if (job.status !== "completed" || !job.result) {
+        throw new Error(errors.failure);
+      }
+
+      setAnalysisData(job.result);
+    } catch (error) {
+      if (activeRunId.current === runId) {
+        setError(error instanceof Error ? error.message : errors.failure);
+      }
     } finally {
-      setIsLoading(false);
+      if (activeRunId.current === runId) {
+        setIsLoading(false);
+      }
     }
   };
 
   const handleReset = () => {
+    activeRunId.current += 1;
     setError(null);
     setIsLoading(false);
     setAnalysisData(null);

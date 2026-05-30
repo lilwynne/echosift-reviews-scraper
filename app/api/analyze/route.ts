@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
-import { analyzeFeedback } from "@/lib/ai-analysis";
 import {
   getCachedAnalysis,
   setCachedAnalysis
 } from "@/lib/analysis-cache";
-import { statusFromScrapeErrorCode } from "@/lib/api-errors";
+import { runAnalyzePipeline } from "@/lib/analyze-pipeline";
 import {
   checkRateLimit,
   createAnalysisCacheKey,
@@ -12,16 +11,7 @@ import {
   getRequestPathname,
   tryAcquireAnalysisSlot
 } from "@/lib/api-guards";
-import type {
-  AnalysisResult,
-  AnalyzeApiResponse,
-  EvidenceMap,
-  ReviewEvidence,
-  ReviewSentiment
-} from "@/lib/analysis-types";
-import { createEmptyAnalysisResult } from "@/lib/empty-analysis";
 import { languages, type Language } from "@/lib/mock-data";
-import { fetchReviews, type NormalizedReview } from "@/lib/reviews";
 
 type AnalyzeRequestBody = {
   url?: unknown;
@@ -33,7 +23,6 @@ const validLanguages = new Set<Language>(
 );
 const DEFAULT_ANALYSIS_MAX_REVIEWS = 50;
 const DEFAULT_ANALYSIS_REVIEW_TEXT_MAX_CHARS = 1200;
-const EVIDENCE_REVIEWS_PER_CARD = 3;
 
 function getPositiveIntegerEnv(name: string, fallback: number) {
   const value = Number.parseInt(process.env[name] ?? "", 10);
@@ -54,31 +43,7 @@ function getAnalysisReviewTextMaxChars() {
   );
 }
 
-function elapsedMs(start: number) {
-  return Math.round(performance.now() - start);
-}
-
-function trimTextForAnalysis(text: string, maxChars: number) {
-  return text.length > maxChars ? `${text.slice(0, maxChars)}...` : text;
-}
-
-function getReviewSnippetId(review: NormalizedReview, index: number) {
-  return `${review.source}:${review.id ?? "review"}:${index + 1}`;
-}
-
-function buildReviewEvidence(reviews: NormalizedReview[]): ReviewEvidence[] {
-  return reviews.map((review, index) => ({
-    ...review,
-    snippetId: getReviewSnippetId(review, index),
-    reviewIndex: index + 1
-  }));
-}
-
-function jsonError(
-  code: string,
-  message: string,
-  status: number
-) {
+function jsonError(code: string, message: string, status: number) {
   return NextResponse.json(
     {
       error: {
@@ -103,185 +68,6 @@ function isValidUrl(value: unknown): value is string {
   }
 }
 
-function formatReviewForAnalysis(
-  review: NormalizedReview,
-  index: number,
-  maxTextChars: number
-) {
-  const lines = [`#${index + 1}`];
-
-  lines.push(`source: ${review.source}`);
-
-  if (review.productName) {
-    lines.push(`product: ${review.productName}`);
-  }
-
-  if (typeof review.rating === "number") {
-    lines.push(`rating: ${review.rating}`);
-  }
-
-  if (review.title) {
-    lines.push(`title: ${review.title}`);
-  }
-
-  if (review.date) {
-    lines.push(`date: ${review.date}`);
-  }
-
-  lines.push(`text: ${trimTextForAnalysis(review.text, maxTextChars)}`);
-
-  return lines.join("\n");
-}
-
-function buildReviewsText(reviews: NormalizedReview[], maxTextChars: number) {
-  if (reviews.length === 0) {
-    return "未抓取到有效评论。";
-  }
-
-  return reviews
-    .map((review, index) =>
-      formatReviewForAnalysis(review, index, maxTextChars)
-    )
-    .join("\n\n---\n\n");
-}
-
-function normalizeEvidenceIndexes(value: unknown, reviewCount: number) {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  const indexes: number[] = [];
-
-  for (const item of value) {
-    const index =
-      typeof item === "number" ? item : Number.parseInt(String(item), 10);
-
-    if (
-      Number.isInteger(index) &&
-      index >= 1 &&
-      index <= reviewCount &&
-      !indexes.includes(index)
-    ) {
-      indexes.push(index);
-    }
-
-    if (indexes.length >= EVIDENCE_REVIEWS_PER_CARD) {
-      break;
-    }
-  }
-
-  return indexes;
-}
-
-function filterReviewsBySentiment(
-  reviews: ReviewEvidence[],
-  sentiment: ReviewSentiment
-) {
-  const ratedReviews = reviews.filter(
-    (review) => typeof review.rating === "number"
-  );
-
-  if (sentiment === "positive") {
-    return ratedReviews.filter((review) => Number(review.rating) >= 4);
-  }
-
-  if (sentiment === "negative") {
-    return ratedReviews.filter((review) => Number(review.rating) <= 2);
-  }
-
-  return ratedReviews.filter((review) => Number(review.rating) === 3);
-}
-
-function getFallbackEvidenceIds(
-  reviews: ReviewEvidence[],
-  sentiment: ReviewSentiment,
-  offset: number
-) {
-  const matchingReviews = filterReviewsBySentiment(reviews, sentiment);
-  const candidates = matchingReviews.length > 0 ? matchingReviews : reviews;
-
-  if (candidates.length === 0) {
-    return [];
-  }
-
-  const ids: string[] = [];
-  const count = Math.min(EVIDENCE_REVIEWS_PER_CARD, candidates.length);
-
-  for (let index = 0; index < count; index += 1) {
-    ids.push(candidates[(offset + index) % candidates.length].snippetId);
-  }
-
-  return ids;
-}
-
-function resolveEvidenceIds(
-  rawIndexes: unknown,
-  reviews: ReviewEvidence[],
-  fallbackSentiment: ReviewSentiment,
-  fallbackOffset: number
-) {
-  const ids = normalizeEvidenceIndexes(rawIndexes, reviews.length)
-    .map((index) => reviews[index - 1]?.snippetId)
-    .filter((id): id is string => Boolean(id));
-
-  if (ids.length > 0) {
-    return ids;
-  }
-
-  return getFallbackEvidenceIds(reviews, fallbackSentiment, fallbackOffset);
-}
-
-function buildEvidenceMap(
-  analysis: AnalysisResult,
-  reviews: ReviewEvidence[]
-): EvidenceMap {
-  const painPointEvidence =
-    analysis.deepInsights.painPointEvidenceReviewIndexes ?? [];
-  const featureRequestEvidence =
-    analysis.deepInsights.featureRequestEvidenceReviewIndexes ?? [];
-  const typicalVoiceEvidence =
-    analysis.typicalVoiceEvidenceReviewIndexes ?? {};
-
-  return {
-    painPoints: analysis.deepInsights.highFreqPainPoints.map((_, index) =>
-      resolveEvidenceIds(
-        painPointEvidence[index],
-        reviews,
-        "negative",
-        index
-      )
-    ),
-    featureRequests: analysis.deepInsights.featureRequests.map((_, index) =>
-      resolveEvidenceIds(
-        featureRequestEvidence[index],
-        reviews,
-        "positive",
-        index
-      )
-    ),
-    typicalVoices: {
-      positive: resolveEvidenceIds(
-        typicalVoiceEvidence.positive,
-        reviews,
-        "positive",
-        0
-      ),
-      neutral: resolveEvidenceIds(
-        typicalVoiceEvidence.neutral,
-        reviews,
-        "neutral",
-        0
-      ),
-      negative: resolveEvidenceIds(
-        typicalVoiceEvidence.negative,
-        reviews,
-        "negative",
-        0
-      )
-    }
-  };
-}
-
 export async function POST(request: Request) {
   let body: AnalyzeRequestBody;
 
@@ -303,6 +89,12 @@ export async function POST(request: Request) {
   }
 
   const language = body.language as Language;
+  const analysisMaxReviews = getAnalysisMaxReviews();
+  const analysisReviewTextMaxChars = getAnalysisReviewTextMaxChars();
+  const cacheKey = createAnalysisCacheKey(body.url, language, {
+    maxReviews: analysisMaxReviews,
+    reviewTextMaxChars: analysisReviewTextMaxChars
+  });
   const rateLimit = checkRateLimit({
     identifier: getClientIp(request.headers),
     pathname: getRequestPathname(request)
@@ -312,7 +104,6 @@ export async function POST(request: Request) {
     return jsonError("RATE_LIMITED", "请求过于频繁，请稍后再试。", 429);
   }
 
-  const cacheKey = createAnalysisCacheKey(body.url, language);
   const cachedAnalysis = getCachedAnalysis(cacheKey);
 
   if (cachedAnalysis) {
@@ -330,110 +121,33 @@ export async function POST(request: Request) {
   }
 
   try {
-    const requestStart = performance.now();
-    const analysisMaxReviews = getAnalysisMaxReviews();
-    const analysisReviewTextMaxChars = getAnalysisReviewTextMaxChars();
-    const scrapeStart = performance.now();
-    const scrapeResult = await fetchReviews(body.url, {
-      maxReviews: analysisMaxReviews
-    });
-    const scrapeMs = elapsedMs(scrapeStart);
-
-    if (!scrapeResult.ok) {
-      console.info("[ANALYZE_TIMING]", {
-        stage: "scrape_failed",
-        scrapeMs,
-        totalMs: elapsedMs(requestStart),
-        maxReviews: analysisMaxReviews,
-        reviewTextMaxChars: analysisReviewTextMaxChars
-      });
-
-      return jsonError(
-        scrapeResult.error.code,
-        scrapeResult.error.message,
-        statusFromScrapeErrorCode(scrapeResult.error.code)
-      );
-    }
-
-    const reviews = buildReviewEvidence(scrapeResult.reviews);
-    let analysis: AnalysisResult;
-
-    if (scrapeResult.count === 0) {
-      analysis = createEmptyAnalysisResult();
-
-      const responseBody: AnalyzeApiResponse = {
-        sourceUrl: body.url,
-        language,
-        scrapeSource: scrapeResult.source,
-        scrapeProvider: scrapeResult.provider,
-        reviewCount: scrapeResult.count,
-        reviews,
-        evidence: buildEvidenceMap(analysis, reviews),
-        analysis
-      };
-
-      console.info("[ANALYZE_TIMING]", {
-        source: scrapeResult.source,
-        provider: scrapeResult.provider,
-        stage: "empty_reviews",
-        scrapeMs,
-        totalMs: elapsedMs(requestStart),
-        reviewCount: scrapeResult.count,
-        maxReviews: analysisMaxReviews,
-        reviewTextMaxChars: analysisReviewTextMaxChars
-      });
-
-      return NextResponse.json(responseBody);
-    }
-
-    try {
-      const analysisStart = performance.now();
-      analysis = await analyzeFeedback(
-        buildReviewsText(scrapeResult.reviews, analysisReviewTextMaxChars)
-      );
-      console.info("[ANALYZE_TIMING]", {
-        source: scrapeResult.source,
-        provider: scrapeResult.provider,
-        scrapeMs,
-        analysisMs: elapsedMs(analysisStart),
-        totalMs: elapsedMs(requestStart),
-        reviewCount: scrapeResult.count,
-        maxReviews: analysisMaxReviews,
-        reviewTextMaxChars: analysisReviewTextMaxChars
-      });
-    } catch {
-      console.info("[ANALYZE_TIMING]", {
-        source: scrapeResult.source,
-        provider: scrapeResult.provider,
-        stage: "analysis_failed",
-        scrapeMs,
-        totalMs: elapsedMs(requestStart),
-        reviewCount: scrapeResult.count,
-        maxReviews: analysisMaxReviews,
-        reviewTextMaxChars: analysisReviewTextMaxChars
-      });
-
-      return jsonError(
-        "AI_ANALYSIS_FAILED",
-        "AI 分析服务暂时不可用，请稍后重试。",
-        502
-      );
-    }
-
-    const responseBody: AnalyzeApiResponse = {
-      sourceUrl: body.url,
+    const result = await runAnalyzePipeline({
+      url: body.url,
       language,
-      scrapeSource: scrapeResult.source,
-      scrapeProvider: scrapeResult.provider,
-      reviewCount: scrapeResult.count,
-      reviews,
-      evidence: buildEvidenceMap(analysis, reviews),
-      analysis
-    };
+      maxReviews: analysisMaxReviews,
+      reviewTextMaxChars: analysisReviewTextMaxChars
+    });
 
-    setCachedAnalysis(cacheKey, responseBody);
+    if (!result.ok) {
+      console.info("[ANALYZE_TIMING]", {
+        ...result.meta,
+        ...result.timings
+      });
 
-    return NextResponse.json(responseBody);
+      return jsonError(result.error.code, result.error.message, result.status);
+    }
+
+    console.info("[ANALYZE_TIMING]", {
+      ...result.meta,
+      ...result.timings,
+      stage: result.response.reviewCount === 0 ? "empty_reviews" : "completed"
+    });
+
+    if (result.response.reviewCount > 0) {
+      setCachedAnalysis(cacheKey, result.response);
+    }
+
+    return NextResponse.json(result.response);
   } finally {
     analysisSlot.release();
   }

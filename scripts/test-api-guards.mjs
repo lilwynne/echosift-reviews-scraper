@@ -187,20 +187,41 @@ test("rate limit and concurrency config read positive integer env overrides", ()
 test("analysis cache key normalizes url and includes language", () => {
   const left = createAnalysisCacheKey(
     " HTTPS://Example.COM/product?b=2&a=1#reviews ",
-    "zh-CN"
+    "zh-CN",
+    {
+      maxReviews: 50,
+      reviewTextMaxChars: 1200
+    }
   );
   const right = createAnalysisCacheKey(
     "https://example.com/product?a=1&b=2",
-    "zh-CN"
+    "zh-CN",
+    {
+      maxReviews: 50,
+      reviewTextMaxChars: 1200
+    }
   );
   const otherLanguage = createAnalysisCacheKey(
     "https://example.com/product?a=1&b=2",
-    "en"
+    "en",
+    {
+      maxReviews: 50,
+      reviewTextMaxChars: 1200
+    }
+  );
+  const otherMaxReviews = createAnalysisCacheKey(
+    "https://example.com/product?a=1&b=2",
+    "zh-CN",
+    {
+      maxReviews: 100,
+      reviewTextMaxChars: 1200
+    }
   );
 
-  assert.match(left, /^analysis:v2:[a-f0-9]{32}$/);
+  assert.match(left, /^analysis:v3:[a-f0-9]{32}$/);
   assert.equal(left, right);
   assert.notEqual(left, otherLanguage);
+  assert.notEqual(left, otherMaxReviews);
   assert.equal(
     normalizeAnalysisUrl(" HTTPS://Example.COM/product?b=2&a=1#reviews "),
     "https://example.com/product?a=1&b=2"

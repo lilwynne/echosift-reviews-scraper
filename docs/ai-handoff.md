@@ -15,6 +15,7 @@ The frontend prototype and UI are considered confirmed by the user. Important co
 - Latest App Store ingestion work keeps Apple RSS as the first source and falls back to parsing the App Store product page's `serialized-server-data` reviews when RSS returns an empty feed.
 - Latest empty-review performance fix makes `/api/analyze` return the standard empty analysis result immediately when ingestion returns zero reviews, instead of spending an AI request on empty input.
 - Latest performance work optimized Product Hunt analysis latency. The slow path was `/api/analyze` fetching up to `REVIEWS_MAX_REVIEWS=100` comments before sending the full comment text to AI. `/api/analyze` now uses the analysis-specific `ANALYSIS_MAX_REVIEWS` default of 50 and trims each review text to `ANALYSIS_REVIEW_TEXT_MAX_CHARS` default of 1200 characters before calling SiliconFlow.
+- Latest web performance work added a webpage-only async analysis job flow. The homepage now submits `POST /api/analyze/jobs` and polls `GET /api/analyze/jobs/{jobId}` every 1.5 seconds. Web jobs default to fetching 100 reviews, selecting the top 40 high-value reviews for AI, and trimming each selected review to 600 characters. The Chrome extension still uses the existing synchronous `/api/analyze` endpoint.
 - Latest extension performance work removed the content script's full-body MutationObserver and 500ms polling, added event-driven SPA URL detection, background in-flight request dedupe, session-memory success caching, and a 90-second analysis timeout.
 - The old Product Hunt crawler/deployment path has been removed from this repo. There is no Apify actor directory, actor deploy script, or actor GitHub workflow left in the project.
 - Latest repository hygiene work added commented `.gitignore` sections and ignores local cache/tool output folders such as `.echosift/`, `.playwright-cli/`, `.cache/`, and `.npm-cache/`. `.echosift/` and `.playwright-cli/` were removed from the Git index with `git rm --cached`, so existing local files remain on disk but future pushes should not include them.
@@ -83,9 +84,21 @@ http://127.0.0.1:3000
   - Evidence buttons expand inline inside each card and show real normalized review snippets from `/api/analyze`.
 - `app/api/analyze/route.ts`
   - Backend API route for analysis.
-  - Validates URL/language, calls `fetchReviews(url, { maxReviews })` with the analysis-specific max review count, formats normalized reviews as capped text, then calls `analyzeFeedback(...)`.
+  - Validates URL/language, then calls the shared analysis pipeline with the synchronous analysis defaults.
   - Logs `[ANALYZE_TIMING]` with scrape and analysis durations for backend performance debugging.
   - Returns `analysis` with the raw SiliconFlow model result. It no longer returns `dashboard`, `kpis`, `sentiment`, `trendData`, or `kanban`.
+- `app/api/analyze/jobs/`
+  - Webpage-only async analysis job API.
+  - `POST /api/analyze/jobs` creates an in-memory job and returns `{ jobId, status }`.
+  - `GET /api/analyze/jobs/{jobId}` returns queued/scraping/analyzing/completed/failed state and includes `result` once completed.
+  - Successful non-empty job results are cached through the same analysis cache as `/api/analyze`, using `analysis:v3` keys with analysis parameters included.
+- `lib/analyze-pipeline.ts`
+  - Shared scrape + AI analysis pipeline used by synchronous `/api/analyze` and webpage jobs.
+  - Handles normalized review evidence, AI prompt formatting, empty-review short-circuiting, and AI evidence-index remapping when a selected review subset is analyzed.
+- `lib/analyze-jobs.ts`
+  - In-memory analyze job store with a 30-minute default TTL.
+  - Web job defaults: `WEB_ANALYSIS_MAX_REVIEWS=100`, `WEB_ANALYSIS_SELECTED_REVIEW_LIMIT=40`, `WEB_ANALYSIS_REVIEW_TEXT_MAX_CHARS=600`.
+  - Reuses the existing process-level analysis concurrency slot before executing the background job.
 - `app/api/reviews/route.ts`
   - Backend API route for testing raw review ingestion.
 - `extension/`
@@ -257,6 +270,36 @@ Request body:
 }
 ```
 
+Web analysis job endpoints:
+
+```text
+POST /api/analyze/jobs
+GET /api/analyze/jobs/{jobId}
+```
+
+Create request body:
+
+```json
+{
+  "url": "https://apps.apple.com/cn/app/example/id123456789",
+  "language": "zh-CN"
+}
+```
+
+Job response shape:
+
+```json
+{
+  "jobId": "7e9f8c6b-6a7a-4a01-85e2-5e0b01af8b4f",
+  "status": "analyzing",
+  "createdAt": "2026-05-30T00:00:00.000Z",
+  "updatedAt": "2026-05-30T00:00:03.000Z",
+  "elapsedMs": 3000
+}
+```
+
+Completed jobs include the existing `AnalyzeApiResponse` under `result`; failed jobs include `{ code, message, status }` under `error`.
+
 ## Review Ingestion
 
 Supported sources:
@@ -279,6 +322,10 @@ REVIEWS_MAX_REVIEWS=100
 REVIEWS_REQUEST_TIMEOUT_MS=120000
 ANALYSIS_MAX_REVIEWS=50
 ANALYSIS_REVIEW_TEXT_MAX_CHARS=1200
+WEB_ANALYSIS_MAX_REVIEWS=100
+WEB_ANALYSIS_SELECTED_REVIEW_LIMIT=40
+WEB_ANALYSIS_REVIEW_TEXT_MAX_CHARS=600
+ANALYSIS_JOB_TTL_MS=1800000
 ```
 
 Implementation details:
@@ -291,6 +338,7 @@ Implementation details:
 - Public helper signature is `fetchReviews(url, options?)`, where `options.maxReviews` can override the default `REVIEWS_MAX_REVIEWS` for a single call. Existing `fetchReviews(url)` calls still use `REVIEWS_MAX_REVIEWS`.
 - `/api/reviews` intentionally keeps the default ingestion behavior and does not pass `maxReviews`.
 - `/api/analyze` passes `ANALYSIS_MAX_REVIEWS` so Product Hunt analysis defaults to one 50-comment GraphQL page instead of two pages for the default 100-review ingestion cap.
+- Web jobs pass `WEB_ANALYSIS_MAX_REVIEWS` and then select at most `WEB_ANALYSIS_SELECTED_REVIEW_LIMIT` reviews for the AI prompt. The response still returns the full fetched evidence pool, capped by `WEB_ANALYSIS_MAX_REVIEWS`.
 - Normalized Product Hunt comments include `text`, `author`, `authorUsername`, `date`, `votes`, `productName`, and `sourceUrl`.
 - Product Hunt response includes `provider: "product-hunt-graphql"` and a `product` metadata object.
 - App Store uses Apple public RSS first:
@@ -314,9 +362,16 @@ Implementation details:
   - `ANALYSIS_MAX_REVIEWS=50` limits analysis ingestion to the first page for Product Hunt.
   - `ANALYSIS_REVIEW_TEXT_MAX_CHARS=1200` caps each review body in the AI prompt.
   - `[ANALYZE_TIMING]` server logs expose scrape, analysis, and total durations.
+- The webpage now uses async jobs for better perceived latency and larger evidence collection:
+  - The browser submits `POST /api/analyze/jobs`, then polls `GET /api/analyze/jobs/{jobId}` every 1.5 seconds.
+  - Status maps to existing loading UI steps: queued/scraping, analyzing, completed.
+  - Jobs default to fetching 100 reviews, selecting 40 high-value reviews for AI, and trimming each selected review to 600 characters.
+  - Selection favors reviews with ratings, longer text, pain/request keywords, votes, and recency.
+  - Because the AI sees a subset, evidence indexes are remapped from AI prompt indexes back to the full `reviews` evidence pool before the dashboard receives them.
+- Analysis cache keys now use `analysis:v3` and include normalized URL, language, max review count, selected review limit, review text character cap, and model type.
 - `scripts/test-review-ingestion.mjs` covers the `maxReviews` override and verifies Product Hunt stops pagination when the requested limit is reached.
 - App Store ingestion tests cover RSS-first behavior, RSS-empty web fallback parsing, and missing `serialized-server-data` returning an empty result without throwing.
-- `scripts/test-analyze-route.mjs` covers the zero-review `/api/analyze` short-circuit path without requiring `SILICONFLOW_API_KEY`.
+- `scripts/test-analyze-route.mjs` covers the zero-review `/api/analyze` short-circuit path, job completion, cache-hit jobs, failed jobs, 100-review ingestion, 40-review AI selection, and evidence remapping.
 
 Error response format:
 
@@ -448,20 +503,24 @@ Notes:
 
 ## Test Results
 
-Latest successful checks after the App Store slug-link fix:
+Latest successful checks after the web analysis job performance update:
 
 ```bash
 npm test
+npm run test:api-guards
+npm run test:analyze-route
 npm run test:ai-analysis
 npm run test:review-ingestion
+npm run lint
 npm run build
-npx tsc --noEmit
 ```
 
-Expected build output includes:
+Latest build output includes:
 
 ```text
 ƒ /api/analyze
+ƒ /api/analyze/jobs
+ƒ /api/analyze/jobs/[jobId]
 ƒ /api/reviews
 ```
 

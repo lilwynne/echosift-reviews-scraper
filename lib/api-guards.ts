@@ -182,13 +182,33 @@ export function normalizeAnalysisUrl(url: string) {
   return parsedUrl.toString();
 }
 
-export function createAnalysisCacheKey(url: string, language: Language) {
+export type AnalysisCacheKeyOptions = {
+  maxReviews?: number;
+  selectedReviewLimit?: number;
+  reviewTextMaxChars?: number;
+  modelType?: string;
+};
+
+export function createAnalysisCacheKey(
+  url: string,
+  language: Language,
+  options: AnalysisCacheKeyOptions = {}
+) {
   const hash = createHash("sha256")
-    .update(`${normalizeAnalysisUrl(url)}\n${language}`)
+    .update(
+      JSON.stringify({
+        url: normalizeAnalysisUrl(url),
+        language,
+        maxReviews: options.maxReviews ?? null,
+        selectedReviewLimit: options.selectedReviewLimit ?? null,
+        reviewTextMaxChars: options.reviewTextMaxChars ?? null,
+        modelType: options.modelType ?? null
+      })
+    )
     .digest("hex")
     .slice(0, 32);
 
-  return `analysis:v2:${hash}`;
+  return `analysis:v3:${hash}`;
 }
 
 export function __resetApiGuardsForTest() {

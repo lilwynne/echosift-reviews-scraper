@@ -24,7 +24,9 @@ EchoSift needs to move from a purely mocked dashboard toward a real review-inges
 - Use `provider` to identify the active backend provider for each source.
 - Use `REVIEWS_MAX_REVIEWS` and `REVIEWS_REQUEST_TIMEOUT_MS` for ingestion limits/timeouts.
 - Use `ANALYSIS_MAX_REVIEWS=50` by default for `/api/analyze`; `/api/reviews` keeps the broader ingestion default.
+- Use webpage-only async analysis jobs for the homepage. Web jobs default to `WEB_ANALYSIS_MAX_REVIEWS=100`, select `WEB_ANALYSIS_SELECTED_REVIEW_LIMIT=40` high-value reviews for AI, and trim selected review text to `WEB_ANALYSIS_REVIEW_TEXT_MAX_CHARS=600`.
 - Keep `/api/analyze` response compatible with the existing mock dashboard while adding `scrapeSource`, `reviewCount`, and `reviews`.
+- Keep the Chrome extension on synchronous `/api/analyze` for compatibility.
 - Keep extension type checking separate from the Next.js app because Plasmo uses its own `~src/*` alias and `extension/tsconfig.json`.
 
 ## Supported Sources
@@ -76,6 +78,7 @@ Smoke-test notes:
 - App Store helper tests cover slug-only link resolution for `https://apps.apple.com/cn/app/soul/`, Apple Search lookup followed by Apple RSS fetching, RSS-first behavior, RSS-empty web fallback parsing, and safe empty results when page data is missing.
 - Invalid App Store source URLs now return `INVALID_REVIEW_SOURCE_URL`, mapped to HTTP 400 instead of 502.
 - `/api/analyze` now returns an empty analysis response immediately when ingestion returns zero reviews, without requiring an AI request.
+- Webpage analysis now runs through `POST /api/analyze/jobs` plus `GET /api/analyze/jobs/{jobId}` polling. Tests cover job completion, cache-hit jobs, failed jobs, 100 fetched reviews, 40 AI reviews, and evidence remapping.
 - Live Product Hunt extraction still needs a real `PRODUCT_HUNT_API_TOKEN`.
 - App Store RSS can return an empty feed for some app/country combinations.
 - Google Play can timeout or fail from restricted networks.
@@ -104,6 +107,16 @@ Smoke-test notes:
 - Fix: keep RSS as the first source, then fetch the product page and parse `serialized-server-data` for `Review` records when RSS returns zero reviews. The fallback returns `provider: "apple-web-page"`.
 - Performance fix: `/api/analyze` now short-circuits zero-review results and returns the standard empty analysis object without calling SiliconFlow.
 
+### 2026-05-30: Web analysis needed 100-review support without slower first results
+
+- Symptom: 50-review webpage and extension analyses could take tens of seconds, and increasing analysis input to 100 full reviews would make model latency worse.
+- Scope: optimized the webpage first and left the Chrome extension on the existing synchronous `/api/analyze` path.
+- Fix: added webpage-only async job endpoints, `POST /api/analyze/jobs` and `GET /api/analyze/jobs/{jobId}`. The homepage now submits a job and polls every 1.5 seconds while mapping queued/scraping/analyzing states to the existing loading UI.
+- Analysis strategy: web jobs fetch up to 100 reviews, select up to 40 high-value reviews for the AI prompt, and trim each selected review to 600 characters. The response still returns the full fetched review evidence pool.
+- Evidence fix: because AI sees a selected subset, backend evidence indexes are remapped from AI prompt indexes back to the full response `reviews` before the dashboard renders evidence buttons.
+- Cache fix: analysis cache keys now use `analysis:v3` and include normalized URL, language, max review count, selected review limit, text cap, and model type to avoid 50-review and 100-review result collisions.
+- Validation completed: `npm run test:api-guards`, `npm run test:analyze-route`, `npm run test:ai-analysis`, `npm run test:review-ingestion`, `npm run lint`, `npm test`, and `npm run build` passed. Build output includes `/api/analyze/jobs` and `/api/analyze/jobs/[jobId]`.
+
 ## Remaining Todo
 
 - Configure backend `.env.local` with `PRODUCT_HUNT_API_TOKEN`.
@@ -112,4 +125,4 @@ Smoke-test notes:
 - Live-test slug-only App Store links from the deployment network and confirm Apple Search resolves the intended app when names are ambiguous.
 - Test Google Play from the deployment network and tune timeout/retry behavior if needed.
 - Decide whether `/api/analyze` should fail hard on scraping errors or fall back to mock data for MVP demos.
-- Feed normalized `reviews` into the next AI analysis pipeline step.
+- Run live browser smoke tests for the new webpage job flow with valid `SILICONFLOW_API_KEY`, and with `PRODUCT_HUNT_API_TOKEN` for Product Hunt links.
