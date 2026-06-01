@@ -1,11 +1,16 @@
 import assert from "node:assert/strict";
+import http from "node:http";
 import test from "node:test";
 import gplayModule from "google-play-scraper";
 
 const originalEnv = {
   PRODUCT_HUNT_API_TOKEN: process.env.PRODUCT_HUNT_API_TOKEN,
   REVIEWS_MAX_REVIEWS: process.env.REVIEWS_MAX_REVIEWS,
-  GOOGLE_PLAY_SCRAPER_THROTTLE: process.env.GOOGLE_PLAY_SCRAPER_THROTTLE
+  REVIEWS_REQUEST_TIMEOUT_MS: process.env.REVIEWS_REQUEST_TIMEOUT_MS,
+  GOOGLE_PLAY_SCRAPER_THROTTLE: process.env.GOOGLE_PLAY_SCRAPER_THROTTLE,
+  GOOGLE_PLAY_WEB_BASE_URL: process.env.GOOGLE_PLAY_WEB_BASE_URL,
+  HTTPS_PROXY: process.env.HTTPS_PROXY,
+  HTTP_PROXY: process.env.HTTP_PROXY
 };
 
 const originalFetch = globalThis.fetch;
@@ -28,11 +33,36 @@ function restoreEnv() {
     process.env.REVIEWS_MAX_REVIEWS = originalEnv.REVIEWS_MAX_REVIEWS;
   }
 
+  if (originalEnv.REVIEWS_REQUEST_TIMEOUT_MS === undefined) {
+    delete process.env.REVIEWS_REQUEST_TIMEOUT_MS;
+  } else {
+    process.env.REVIEWS_REQUEST_TIMEOUT_MS =
+      originalEnv.REVIEWS_REQUEST_TIMEOUT_MS;
+  }
+
   if (originalEnv.GOOGLE_PLAY_SCRAPER_THROTTLE === undefined) {
     delete process.env.GOOGLE_PLAY_SCRAPER_THROTTLE;
   } else {
     process.env.GOOGLE_PLAY_SCRAPER_THROTTLE =
       originalEnv.GOOGLE_PLAY_SCRAPER_THROTTLE;
+  }
+
+  if (originalEnv.GOOGLE_PLAY_WEB_BASE_URL === undefined) {
+    delete process.env.GOOGLE_PLAY_WEB_BASE_URL;
+  } else {
+    process.env.GOOGLE_PLAY_WEB_BASE_URL = originalEnv.GOOGLE_PLAY_WEB_BASE_URL;
+  }
+
+  if (originalEnv.HTTPS_PROXY === undefined) {
+    delete process.env.HTTPS_PROXY;
+  } else {
+    process.env.HTTPS_PROXY = originalEnv.HTTPS_PROXY;
+  }
+
+  if (originalEnv.HTTP_PROXY === undefined) {
+    delete process.env.HTTP_PROXY;
+  } else {
+    process.env.HTTP_PROXY = originalEnv.HTTP_PROXY;
   }
 }
 
@@ -74,6 +104,41 @@ function createAppStoreSerializedServerData(reviews) {
 
 function createAppStoreHtml(serializedServerData) {
   return `<!doctype html><html><body><script type="application/json" id="serialized-server-data">${serializedServerData}</script></body></html>`;
+}
+
+/**
+ * @param {http.RequestListener} handler
+ * @returns {Promise<{ close: () => Promise<void>, url: string }>}
+ */
+function createHttpServer(handler) {
+  return new Promise((resolve, reject) => {
+    const server = http.createServer(handler);
+
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+
+      if (!address || typeof address === "string") {
+        reject(new Error("Test server did not expose a TCP port."));
+        return;
+      }
+
+      resolve({
+        close: () =>
+          new Promise((closeResolve, closeReject) => {
+            server.close((error) => {
+              if (error) {
+                closeReject(error);
+                return;
+              }
+
+              closeResolve();
+            });
+          }),
+        url: `http://127.0.0.1:${address.port}`
+      });
+    });
+  });
 }
 
 test("product hunt requests use the official graphql api and normalize comments", async () => {
@@ -579,6 +644,7 @@ test("app store web fallback returns empty reviews when serialized data is missi
 
 test("google play reviews pass browser headers, content type, and throttle", async () => {
   process.env.GOOGLE_PLAY_SCRAPER_THROTTLE = "7";
+  process.env.HTTPS_PROXY = "http://proxy.test:8080";
 
   let capturedOptions;
 
@@ -625,6 +691,7 @@ test("google play reviews pass browser headers, content type, and throttle", asy
     );
     assert.match(capturedOptions.requestOptions.headers["User-Agent"], /Mozilla\/5\.0/);
     assert.match(capturedOptions.requestOptions.headers["Accept-Language"], /en-US/);
+    assert.equal(typeof capturedOptions.requestOptions.agent.https, "object");
   } finally {
     restoreGplayReviews();
     restoreEnv();
@@ -653,6 +720,82 @@ test("google play reviews use the default throttle", async () => {
     assert.equal(result.ok, true);
     assert.equal(capturedOptions.throttle, 10);
   } finally {
+    restoreGplayReviews();
+    restoreEnv();
+  }
+});
+
+test("google play reviews time out instead of hanging", async () => {
+  process.env.REVIEWS_REQUEST_TIMEOUT_MS = "10";
+  const server = await createHttpServer((_request, response) => {
+    response.writeHead(200, {
+      "content-type": "text/html; charset=utf-8"
+    });
+    response.end("<!doctype html><html><body>No reviews here.</body></html>");
+  });
+
+  gplayModule.reviews = async () => new Promise(() => undefined);
+  process.env.GOOGLE_PLAY_WEB_BASE_URL = `${server.url}/store/apps/details`;
+
+  try {
+    const { fetchReviews } = await loadModule();
+    const result = await fetchReviews(
+      "https://play.google.com/store/apps/details?id=com.example.app"
+    );
+
+    assert.equal(result.ok, false);
+    assert.equal(result.error.code, "REVIEW_FETCH_TIMEOUT");
+  } finally {
+    await server.close();
+    restoreGplayReviews();
+    restoreEnv();
+  }
+});
+
+test("google play reviews fall back to web page reviews after scraper timeout", async () => {
+  process.env.REVIEWS_REQUEST_TIMEOUT_MS = "50";
+
+  const reviewId = "655f8b5e-b1aa-44e1-90e7-0077e6b19b9a";
+  let requestedPath = "";
+  const server = await createHttpServer((request, response) => {
+    requestedPath = request.url ?? "";
+    response.writeHead(200, {
+      "content-type": "text/html; charset=utf-8"
+    });
+    response.end(`<!doctype html><html><body>
+      <div class="EGFGHd" data-review-id="${reviewId}">
+        <div class="X5PpBb">Jordan J</div>
+        <div aria-label="Rated 1 stars out of five stars"></div>
+        <span class="bp9Aid">September 10, 2025</span>
+        <div class="h3YV2d">Repeatedly says something went wrong. Won&#39;t generate a thing.</div>
+        <div data-original-thumbs-up-count="39235"></div>
+      </div>
+    </body></html>`);
+  });
+
+  gplayModule.reviews = async () => new Promise(() => undefined);
+  process.env.GOOGLE_PLAY_WEB_BASE_URL = `${server.url}/store/apps/details`;
+
+  try {
+    const { fetchReviews } = await loadModule();
+    const result = await fetchReviews(
+      "https://play.google.com/store/apps/details?id=com.example.app"
+    );
+
+    assert.equal(result.ok, true);
+    assert.equal(result.provider, "google-play-web-page");
+    assert.equal(requestedPath, "/store/apps/details?id=com.example.app&hl=en&gl=us");
+    assert.equal(result.count, 1);
+    assert.equal(result.reviews[0].id, reviewId);
+    assert.equal(result.reviews[0].author, "Jordan J");
+    assert.equal(result.reviews[0].rating, 1);
+    assert.equal(result.reviews[0].votes, 39235);
+    assert.equal(
+      result.reviews[0].text,
+      "Repeatedly says something went wrong. Won't generate a thing."
+    );
+  } finally {
+    await server.close();
     restoreGplayReviews();
     restoreEnv();
   }

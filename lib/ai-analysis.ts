@@ -2,6 +2,7 @@ import OpenAI from "openai";
 
 export const DEFAULT_ANALYSIS_MODEL = "deepseek-ai/DeepSeek-V4-Flash";
 export const SILICONFLOW_BASE_URL = "https://api.siliconflow.cn/v1";
+const DEFAULT_AI_ANALYSIS_TIMEOUT_MS = 30_000;
 
 export type FeedbackAnalysisResult = {
   insightPreview: {
@@ -41,6 +42,7 @@ export type FeedbackAnalysisResult = {
 type SiliconFlowClientOptions = {
   baseURL: string;
   apiKey: string;
+  timeout?: number;
 };
 
 type AnalyzeFeedbackRequest = {
@@ -153,8 +155,45 @@ function getSiliconFlowApiKey() {
   return process.env.SILICONFLOW_API_KEY?.trim();
 }
 
-function createAnalysisError() {
-  return new Error("AI_ANALYSIS_FAILED");
+function getPositiveIntegerEnv(name: string, fallback: number) {
+  const value = Number.parseInt(process.env[name] ?? "", 10);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+export function getAiAnalysisTimeoutMs() {
+  return getPositiveIntegerEnv(
+    "AI_ANALYSIS_TIMEOUT_MS",
+    DEFAULT_AI_ANALYSIS_TIMEOUT_MS
+  );
+}
+
+function createAnalysisError(code = "AI_ANALYSIS_FAILED") {
+  return new Error(code);
+}
+
+function createTimeoutError() {
+  const error = createAnalysisError("AI_ANALYSIS_TIMEOUT");
+  error.name = "TimeoutError";
+  return error;
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number) {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeout = setTimeout(() => {
+          reject(createTimeoutError());
+        }, timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
 }
 
 export async function analyzeFeedback(
@@ -174,27 +213,32 @@ export async function analyzeFeedback(
   let content: string | null | undefined;
 
   try {
+    const timeoutMs = getAiAnalysisTimeoutMs();
     const client = clientFactory({
       baseURL: SILICONFLOW_BASE_URL,
-      apiKey
+      apiKey,
+      timeout: timeoutMs
     });
 
-    const completion = await client.chat.completions.create({
-      model: modelType,
-      messages: [
-        {
-          role: "system",
-          content: ANALYSIS_SYSTEM_PROMPT
-        },
-        {
-          role: "user",
-          content: reviewsText
+    const completion = await withTimeout(
+      client.chat.completions.create({
+        model: modelType,
+        messages: [
+          {
+            role: "system",
+            content: ANALYSIS_SYSTEM_PROMPT
+          },
+          {
+            role: "user",
+            content: reviewsText
+          }
+        ],
+        response_format: {
+          type: "json_object"
         }
-      ],
-      response_format: {
-        type: "json_object"
-      }
-    });
+      }),
+      timeoutMs
+    );
 
     content = completion.choices?.[0]?.message?.content;
   } catch (error) {
@@ -203,7 +247,9 @@ export async function analyzeFeedback(
       modelType,
       error
     });
-    throw createAnalysisError();
+    throw error instanceof Error && error.message === "AI_ANALYSIS_TIMEOUT"
+      ? error
+      : createAnalysisError();
   }
 
   if (!content?.trim()) {

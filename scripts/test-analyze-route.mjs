@@ -5,6 +5,8 @@ import { createEmptyAnalysisResult } from "../lib/empty-analysis.ts";
 
 const originalApiKey = process.env.SILICONFLOW_API_KEY;
 const originalRateLimit = process.env.ANALYZE_RATE_LIMIT_MAX_REQUESTS;
+const originalAnalysisJobTimeout = process.env.ANALYSIS_JOB_TIMEOUT_MS;
+const originalReviewRequestTimeout = process.env.REVIEWS_REQUEST_TIMEOUT_MS;
 const originalFetch = globalThis.fetch;
 const originalConsoleInfo = console.info;
 
@@ -71,6 +73,18 @@ function restoreEnv() {
     delete process.env.ANALYZE_RATE_LIMIT_MAX_REQUESTS;
   } else {
     process.env.ANALYZE_RATE_LIMIT_MAX_REQUESTS = originalRateLimit;
+  }
+
+  if (originalAnalysisJobTimeout === undefined) {
+    delete process.env.ANALYSIS_JOB_TIMEOUT_MS;
+  } else {
+    process.env.ANALYSIS_JOB_TIMEOUT_MS = originalAnalysisJobTimeout;
+  }
+
+  if (originalReviewRequestTimeout === undefined) {
+    delete process.env.REVIEWS_REQUEST_TIMEOUT_MS;
+  } else {
+    process.env.REVIEWS_REQUEST_TIMEOUT_MS = originalReviewRequestTimeout;
   }
 }
 
@@ -351,14 +365,46 @@ test("review preselection keeps high-value reviews within the configured limit",
   assert(selected.some((review) => review.reviewIndex === 6));
 });
 
-test("analyze job completes with 100 fetched reviews, 40 AI reviews, and mapped evidence", async () => {
+test("analyze jobs share state across separately loaded route modules", async () => {
+  console.info = () => undefined;
+  const importSuffix = Date.now();
+  const firstModule = await import(
+    `../lib/analyze-jobs.ts?store-a=${importSuffix}`
+  );
+  const secondModule = await import(
+    `../lib/analyze-jobs.ts?store-b=${importSuffix}`
+  );
+
+  const created = firstModule.createAnalyzeJob({
+    url: "https://example.com",
+    language: "zh-CN",
+    maxReviews: 1,
+    selectedReviewLimit: 1,
+    reviewTextMaxChars: 10
+  });
+  const found = secondModule.getAnalyzeJob(created.jobId);
+
+  assert.equal(found?.jobId, created.jobId);
+
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const current = secondModule.getAnalyzeJob(created.jobId);
+
+    if (current?.status === "failed" || current?.status === "completed") {
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+});
+
+test("analyze job completes with 50 fetched reviews, 24 AI reviews, and mapped evidence", async () => {
   process.env.SILICONFLOW_API_KEY = "siliconflow-test-key";
   process.env.ANALYZE_RATE_LIMIT_MAX_REQUESTS = "100";
   console.info = () => undefined;
 
   const appUrl = "https://apps.apple.com/cn/app/example/id123456789";
   let capturedAnalysisText = "";
-  const rssReviews = Array.from({ length: 100 }, (_, index) => {
+  const rssReviews = Array.from({ length: 50 }, (_, index) => {
     const reviewNumber = index + 1;
     return {
       id: {
@@ -369,12 +415,12 @@ test("analyze job completes with 100 fetched reviews, 40 AI reviews, and mapped 
       },
       content: {
         label:
-          reviewNumber === 100
+          reviewNumber === 50
             ? "希望增加导出工作流，并优化同步失败的问题。"
             : `普通评论 ${reviewNumber}`
       },
       "im:rating": {
-        label: reviewNumber === 100 ? "1" : "5"
+        label: reviewNumber === 50 ? "1" : "5"
       },
       updated: {
         label: `2026-05-${String((reviewNumber % 28) + 1).padStart(2, "0")}T00:00:00.000Z`
@@ -388,7 +434,7 @@ test("analyze job completes with 100 fetched reviews, 40 AI reviews, and mapped 
         create: async (request) => {
           capturedAnalysisText = request.messages[1].content;
           const selectedReviewMatch = capturedAnalysisText.match(
-            /^#(\d+)\noriginalIndex: 100/m
+            /^#(\d+)\noriginalIndex: 50/m
           );
           const selectedReviewIndex = Number.parseInt(
             selectedReviewMatch?.[1] ?? "1",
@@ -455,12 +501,12 @@ test("analyze job completes with 100 fetched reviews, 40 AI reviews, and mapped 
 
   assert.equal(response.status, 200);
   assert.equal(payload.status, "completed");
-  assert.equal(payload.result.reviewCount, 100);
-  assert.equal(payload.result.reviews.length, 100);
-  assert.equal((capturedAnalysisText.match(/^#/gm) ?? []).length, 40);
+  assert.equal(payload.result.reviewCount, 50);
+  assert.equal(payload.result.reviews.length, 50);
+  assert.equal((capturedAnalysisText.match(/^#/gm) ?? []).length, 24);
   assert(capturedAnalysisText.includes("希望增加导出工作流"));
   assert.deepEqual(payload.result.evidence.painPoints[0], [
-    "app-store:rss-review-100:100"
+    "app-store:rss-review-50:50"
   ]);
 });
 
@@ -561,5 +607,27 @@ test("analyze job exposes failed scrape errors with a stable shape", async () =>
     message:
       "缺少 PRODUCT_HUNT_API_TOKEN，请先在 .env.local 中配置 Product Hunt Developer Token。",
     status: 503
+  });
+});
+
+test("analyze job fails with a hard timeout instead of polling forever", async () => {
+  process.env.ANALYZE_RATE_LIMIT_MAX_REQUESTS = "100";
+  process.env.ANALYSIS_JOB_TIMEOUT_MS = "10";
+  process.env.REVIEWS_REQUEST_TIMEOUT_MS = "10";
+  console.info = () => undefined;
+
+  globalThis.fetch = async () => new Promise(() => undefined);
+
+  const createResponse = await POST_JOB(
+    createAnalyzeJobRequest("https://apps.apple.com/cn/app/example/id123456789")
+  );
+  const createPayload = await createResponse.json();
+  const { payload } = await waitForAnalyzeJob(createPayload.jobId);
+
+  assert.equal(payload.status, "failed");
+  assert.deepEqual(payload.error, {
+    code: "ANALYZE_JOB_TIMEOUT",
+    message: "分析任务耗时过长，请稍后重试或减少评论数量。",
+    status: 504
   });
 });

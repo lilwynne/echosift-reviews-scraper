@@ -35,7 +35,7 @@ const errorCopy: Record<
 };
 
 const POLL_INTERVAL_MS = 1500;
-const MAX_POLL_ATTEMPTS = 80;
+const MAX_POLL_ATTEMPTS = 35;
 
 function getLoadingStepForJobStatus(status: AnalyzeJobStatus) {
   if (status === "analyzing") {
@@ -91,7 +91,9 @@ async function createAnalyzeJob(url: string, language: Language) {
 }
 
 async function fetchAnalyzeJob(jobId: string) {
-  const response = await fetch(`/api/analyze/jobs/${encodeURIComponent(jobId)}`);
+  const response = await fetch(`/api/analyze/jobs/${encodeURIComponent(jobId)}`, {
+    cache: "no-store"
+  });
 
   return readJsonResponse<AnalyzeJobResponse>(response, "ANALYZE_JOB_FAILED");
 }

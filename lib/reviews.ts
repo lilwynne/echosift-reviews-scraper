@@ -1,4 +1,8 @@
 import gplayModule from "google-play-scraper";
+import got from "got";
+import { HttpsProxyAgent } from "https-proxy-agent";
+import type { Agent as HttpAgent } from "node:http";
+import type { Agent as HttpsAgent } from "node:https";
 import {
   APP_STORE_HEADERS,
   APP_STORE_WEB_HEADERS,
@@ -46,7 +50,8 @@ export type FetchReviewsSuccess = {
     | "product-hunt-graphql"
     | "apple-rss"
     | "apple-web-page"
-    | "google-play-scraper";
+    | "google-play-scraper"
+    | "google-play-web-page";
   product?: NormalizedProduct;
   count: number;
   reviews: NormalizedReview[];
@@ -101,6 +106,13 @@ type GooglePlayReviewsOptions = {
   throttle: number;
   requestOptions: {
     headers: typeof GOOGLE_PLAY_HEADERS;
+    agent?: {
+      http?: HttpAgent;
+      https?: HttpsAgent;
+    };
+    timeout?: {
+      request: number;
+    };
   };
 };
 type GooglePlayReviewsResult = {
@@ -259,6 +271,62 @@ function getGooglePlayScraperThrottle() {
   );
 }
 
+function getProxyUrl() {
+  return (
+    process.env.HTTPS_PROXY?.trim() ||
+    process.env.https_proxy?.trim() ||
+    process.env.HTTP_PROXY?.trim() ||
+    process.env.http_proxy?.trim() ||
+    undefined
+  );
+}
+
+function createHttpProxyAgent() {
+  const proxyUrl = getProxyUrl();
+
+  return proxyUrl ? new HttpsProxyAgent(proxyUrl) : undefined;
+}
+
+function getAgentOptions() {
+  const agent = createHttpProxyAgent();
+
+  return agent
+    ? {
+        http: agent,
+        https: agent
+      }
+    : undefined;
+}
+
+function createTimeoutError(message: string) {
+  const error = new Error(message);
+  error.name = "TimeoutError";
+  return error;
+}
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string
+) {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeout = setTimeout(() => {
+          reject(createTimeoutError(message));
+        }, timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
+}
+
 function getProductHuntApiToken() {
   return process.env.PRODUCT_HUNT_API_TOKEN?.trim() || undefined;
 }
@@ -328,6 +396,12 @@ function textFromHtml(html?: string) {
 
 function decodeHtmlEntities(value: string) {
   return value
+    .replace(/&#(\d+);/g, (_, codePoint: string) =>
+      String.fromCodePoint(Number.parseInt(codePoint, 10))
+    )
+    .replace(/&#x([a-f0-9]+);/gi, (_, codePoint: string) =>
+      String.fromCodePoint(Number.parseInt(codePoint, 16))
+    )
     .replace(/&quot;/g, "\"")
     .replace(/&#34;/g, "\"")
     .replace(/&#x22;/gi, "\"")
@@ -865,6 +939,78 @@ function normalizeGooglePlayReviews(rawItems: unknown[]) {
   return reviews;
 }
 
+function getFirstHtmlMatch(html: string, pattern: RegExp) {
+  const value = html.match(pattern)?.[1];
+
+  return value ? decodeHtmlEntities(textFromHtml(value) ?? "") : undefined;
+}
+
+function parseGooglePlayVotes(value?: string) {
+  if (!value) {
+    return undefined;
+  }
+
+  const parsed = Number.parseInt(value.replace(/[^\d]/g, ""), 10);
+
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function getGooglePlayWebReviews(
+  html: string,
+  sourceUrl: string,
+  maxReviews: number
+) {
+  const reviews: NormalizedReview[] = [];
+  const rawItems: JsonRecord[] = [];
+  const reviewBlocks = html.match(
+    /<div class="EGFGHd"[\s\S]*?(?=<div class="EGFGHd"|<script|<footer class="S9dYaf"|$)/g
+  );
+
+  for (const block of reviewBlocks ?? []) {
+    if (reviews.length >= maxReviews) {
+      break;
+    }
+
+    const text = getFirstHtmlMatch(block, /<div class="h3YV2d">([\s\S]*?)<\/div>/);
+
+    if (!text) {
+      continue;
+    }
+
+    const rawItem: JsonRecord = {
+      id: block.match(/data-review-id="([^"]+)"/)?.[1],
+      userName: getFirstHtmlMatch(block, /<div class="X5PpBb">([\s\S]*?)<\/div>/),
+      date: getFirstHtmlMatch(block, /<span class="bp9Aid">([\s\S]*?)<\/span>/),
+      score: numberFrom(
+        {
+          score: block.match(
+            /aria-label="Rated (\d+) stars? out of five stars"/
+          )?.[1]
+        },
+        ["score"]
+      ),
+      thumbsUp: parseGooglePlayVotes(
+        block.match(/data-original-thumbs-up-count="([^"]+)"/)?.[1] ??
+          getFirstHtmlMatch(block, /<div class="AJTPZc"[^>]*>([\s\S]*?)<\/div>/)
+      ),
+      text
+    };
+    const review = getGooglePlayReview(rawItem);
+
+    if (!review) {
+      continue;
+    }
+
+    reviews.push({
+      ...review,
+      sourceUrl
+    });
+    rawItems.push(rawItem);
+  }
+
+  return { reviews, rawItems };
+}
+
 async function readJsonError(response: Response) {
   try {
     const payload = await response.json();
@@ -926,6 +1072,43 @@ async function fetchWithTimeout(url: URL | string, init?: RequestInit) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function fetchGooglePlayWebReviews(
+  url: string,
+  sourceConfig: GooglePlayConfig,
+  maxReviews: number
+) {
+  const endpoint = new URL(
+    process.env.GOOGLE_PLAY_WEB_BASE_URL?.trim() ||
+      "https://play.google.com/store/apps/details"
+  );
+  endpoint.searchParams.set("id", sourceConfig.appId);
+  endpoint.searchParams.set("hl", sourceConfig.lang);
+  endpoint.searchParams.set("gl", sourceConfig.country);
+
+  const response = await got(endpoint.toString(), {
+    agent: getAgentOptions(),
+    timeout: {
+      request: getRequestTimeoutMs()
+    },
+    headers: GOOGLE_PLAY_HEADERS
+  });
+  const { reviews, rawItems } = getGooglePlayWebReviews(
+    response.body,
+    url,
+    maxReviews
+  );
+
+  return {
+    ok: true as const,
+    source: sourceConfig.source,
+    sourceUrl: url,
+    provider: "google-play-web-page" as const,
+    count: reviews.length,
+    reviews,
+    rawItems
+  };
 }
 
 async function fetchAppStoreWebReviews(
@@ -1162,19 +1345,30 @@ async function fetchGooglePlayReviews(
   sourceConfig: GooglePlayConfig,
   maxReviews: number
 ): Promise<FetchReviewsResult> {
+  let scrapeError: unknown;
+
   try {
     const gplay = gplayModule as GooglePlayModuleWithRuntimeOptions;
-    const result = await gplay.reviews({
-      appId: sourceConfig.appId,
-      sort: 2,
-      num: maxReviews,
-      lang: sourceConfig.lang,
-      country: sourceConfig.country,
-      throttle: getGooglePlayScraperThrottle(),
-      requestOptions: {
-        headers: GOOGLE_PLAY_HEADERS
-      }
-    });
+    const requestTimeoutMs = getRequestTimeoutMs();
+    const result = await withTimeout(
+      gplay.reviews({
+        appId: sourceConfig.appId,
+        sort: 2,
+        num: maxReviews,
+        lang: sourceConfig.lang,
+        country: sourceConfig.country,
+        throttle: getGooglePlayScraperThrottle(),
+        requestOptions: {
+          headers: GOOGLE_PLAY_HEADERS,
+          agent: getAgentOptions(),
+          timeout: {
+            request: requestTimeoutMs
+          }
+        }
+      }),
+      requestTimeoutMs,
+      "Google Play review request timed out."
+    );
     const rawItems = Array.isArray(result.data) ? result.data : [];
     const reviews = normalizeGooglePlayReviews(rawItems).slice(0, maxReviews);
 
@@ -1188,6 +1382,30 @@ async function fetchGooglePlayReviews(
       rawItems
     };
   } catch (error) {
+    scrapeError = error;
+
+    if (isGooglePlayBlockedError(error)) {
+      return googlePlayScrapeBlockedFailure();
+    }
+  }
+
+  try {
+    const webResult = await fetchGooglePlayWebReviews(
+      url,
+      sourceConfig,
+      Math.min(maxReviews, 10)
+    );
+
+    if (webResult.reviews.length > 0) {
+      return webResult;
+    }
+  } catch {
+    // Fall through to the original scraper error.
+  }
+
+  {
+    const error = scrapeError;
+
     if (isTimeoutError(error)) {
       return {
         ok: false,

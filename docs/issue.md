@@ -24,7 +24,7 @@ EchoSift needs to move from a purely mocked dashboard toward a real review-inges
 - Use `provider` to identify the active backend provider for each source.
 - Use `REVIEWS_MAX_REVIEWS` and `REVIEWS_REQUEST_TIMEOUT_MS` for ingestion limits/timeouts.
 - Use `ANALYSIS_MAX_REVIEWS=50` by default for `/api/analyze`; `/api/reviews` keeps the broader ingestion default.
-- Use webpage-only async analysis jobs for the homepage. Web jobs default to `WEB_ANALYSIS_MAX_REVIEWS=100`, select `WEB_ANALYSIS_SELECTED_REVIEW_LIMIT=40` high-value reviews for AI, and trim selected review text to `WEB_ANALYSIS_REVIEW_TEXT_MAX_CHARS=600`.
+- Use webpage-only async analysis jobs for the homepage. Web jobs default to `WEB_ANALYSIS_MAX_REVIEWS=50`, select `WEB_ANALYSIS_SELECTED_REVIEW_LIMIT=24` high-value reviews for AI, and trim selected review text to `WEB_ANALYSIS_REVIEW_TEXT_MAX_CHARS=500`.
 - Keep `/api/analyze` response compatible with the existing mock dashboard while adding `scrapeSource`, `reviewCount`, and `reviews`.
 - Keep the Chrome extension on synchronous `/api/analyze` for compatibility.
 - Keep extension type checking separate from the Next.js app because Plasmo uses its own `~src/*` alias and `extension/tsconfig.json`.
@@ -116,6 +116,14 @@ Smoke-test notes:
 - Evidence fix: because AI sees a selected subset, backend evidence indexes are remapped from AI prompt indexes back to the full response `reviews` before the dashboard renders evidence buttons.
 - Cache fix: analysis cache keys now use `analysis:v3` and include normalized URL, language, max review count, selected review limit, text cap, and model type to avoid 50-review and 100-review result collisions.
 - Validation completed: `npm run test:api-guards`, `npm run test:analyze-route`, `npm run test:ai-analysis`, `npm run test:review-ingestion`, `npm run lint`, `npm test`, and `npm run build` passed. Build output includes `/api/analyze/jobs` and `/api/analyze/jobs/[jobId]`.
+
+### 2026-05-31: Google Play jobs could poll too long
+
+- Symptom: Google Play analysis could stay on the loading state for more than a minute while the page kept polling the same job.
+- Root cause: the async web job path lowered prompt size, but raised webpage fetching to 100 reviews, did not put a hard timeout around the `google-play-scraper` promise, the AI request, or the job itself, and kept jobs in a route-local module `Map` that could be invisible to the `[jobId]` polling route in Next dev bundles.
+- Fix: web jobs now use a process-level shared job store, default to 50 fetched reviews, 24 selected AI reviews, 500 chars per selected review, a 45-second job timeout, and a 30-second AI timeout. Google Play scraping now also has a promise-level timeout in addition to request options.
+- Follow-up fix: local startup now exports the macOS HTTPS proxy to the Next.js backend, and Google Play scraping falls back to parsing first-page web reviews when the batchexecute review endpoint times out or disconnects.
+- Validation completed: `npm test`, `npm run build`, and a local browser check on `http://localhost:3000`.
 
 ## Remaining Todo
 

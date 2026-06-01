@@ -17,6 +17,8 @@
     "autoprefixer": "^10.4.20",
     "framer-motion": "^12.40.0",
     "google-play-scraper": "^10.1.2",
+    "got": "^11.8.6",
+    "https-proxy-agent": "^7.0.6",
     "lucide-react": "^0.468.0",
     "next": "^14.2.35",
     "openai": "^6.39.0",

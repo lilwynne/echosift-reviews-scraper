@@ -473,14 +473,19 @@ export async function runAnalyzePipeline({
         reviewTextMaxChars
       }
     };
-  } catch {
+  } catch (error) {
+    const isTimeout =
+      error instanceof Error && error.message === "AI_ANALYSIS_TIMEOUT";
+
     return {
       ok: false,
       error: {
-        code: "AI_ANALYSIS_FAILED",
-        message: "AI 分析服务暂时不可用，请稍后重试。"
+        code: isTimeout ? "AI_ANALYSIS_TIMEOUT" : "AI_ANALYSIS_FAILED",
+        message: isTimeout
+          ? "AI 分析耗时过长，请稍后重试或减少评论数量。"
+          : "AI 分析服务暂时不可用，请稍后重试。"
       },
-      status: 502,
+      status: isTimeout ? 504 : 502,
       timings: {
         scrapeMs,
         totalMs: elapsedMs(requestStart)

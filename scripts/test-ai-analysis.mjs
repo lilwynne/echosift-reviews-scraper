@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 
 const originalApiKey = process.env.SILICONFLOW_API_KEY;
+const originalAiAnalysisTimeout = process.env.AI_ANALYSIS_TIMEOUT_MS;
 const originalConsoleError = console.error;
 
 const {
@@ -55,6 +56,12 @@ afterEach(() => {
   } else {
     process.env.SILICONFLOW_API_KEY = originalApiKey;
   }
+
+  if (originalAiAnalysisTimeout === undefined) {
+    delete process.env.AI_ANALYSIS_TIMEOUT_MS;
+  } else {
+    process.env.AI_ANALYSIS_TIMEOUT_MS = originalAiAnalysisTimeout;
+  }
 });
 
 test("analyzeFeedback calls SiliconFlow with default model and parses JSON", async () => {
@@ -94,7 +101,8 @@ test("analyzeFeedback calls SiliconFlow with default model and parses JSON", asy
   assert.deepEqual(result.typicalVoiceEvidenceReviewIndexes.negative, [3]);
   assert.deepEqual(capturedOptions, {
     baseURL: SILICONFLOW_BASE_URL,
-    apiKey: "siliconflow-test-key"
+    apiKey: "siliconflow-test-key",
+    timeout: 30000
   });
   assert.equal(capturedRequest.model, DEFAULT_ANALYSIS_MODEL);
   assert.deepEqual(capturedRequest.response_format, {
@@ -221,4 +229,30 @@ test("analyzeFeedback logs and throws a normalized error when the API key is mis
   assert.equal(logs[0][0], "[AI_ANALYSIS_FAILED]");
   assert.equal(logs[0][1].stage, "config");
   assert.equal(logs[0][1].error.message, "MISSING_SILICONFLOW_API_KEY");
+});
+
+test("analyzeFeedback times out slow model requests", async () => {
+  process.env.SILICONFLOW_API_KEY = "siliconflow-test-key";
+  process.env.AI_ANALYSIS_TIMEOUT_MS = "10";
+
+  const logs = [];
+  console.error = (...args) => {
+    logs.push(args);
+  };
+
+  __setAnalyzeFeedbackClientFactoryForTest(() => ({
+    chat: {
+      completions: {
+        create: async () => new Promise(() => undefined)
+      }
+    }
+  }));
+
+  await assert.rejects(
+    analyzeFeedback("用户评论原文"),
+    /AI_ANALYSIS_TIMEOUT/
+  );
+  assert.equal(logs.length, 1);
+  assert.equal(logs[0][0], "[AI_ANALYSIS_FAILED]");
+  assert.equal(logs[0][1].stage, "request");
 });

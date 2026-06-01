@@ -31,13 +31,24 @@ export type CreateAnalyzeJobOptions = {
   reviewTextMaxChars?: number;
 };
 
-const DEFAULT_WEB_ANALYSIS_MAX_REVIEWS = 100;
-const DEFAULT_WEB_ANALYSIS_SELECTED_REVIEW_LIMIT = 40;
-const DEFAULT_WEB_ANALYSIS_REVIEW_TEXT_MAX_CHARS = 600;
+const DEFAULT_WEB_ANALYSIS_MAX_REVIEWS = 50;
+const DEFAULT_WEB_ANALYSIS_SELECTED_REVIEW_LIMIT = 24;
+const DEFAULT_WEB_ANALYSIS_REVIEW_TEXT_MAX_CHARS = 500;
 const DEFAULT_ANALYSIS_JOB_TTL_MS = 30 * 60 * 1000;
+const DEFAULT_ANALYSIS_JOB_TIMEOUT_MS = 45_000;
 const ANALYSIS_JOB_SLOT_RETRY_MS = 500;
+const ANALYZE_JOBS_STORE_KEY = "__echosiftAnalyzeJobs";
 
-const jobs = new Map<string, AnalyzeJobEntry>();
+const globalForAnalyzeJobs = globalThis as typeof globalThis & {
+  [ANALYZE_JOBS_STORE_KEY]?: Map<string, AnalyzeJobEntry>;
+};
+
+const jobs =
+  globalForAnalyzeJobs[ANALYZE_JOBS_STORE_KEY] ??
+  (globalForAnalyzeJobs[ANALYZE_JOBS_STORE_KEY] = new Map<
+    string,
+    AnalyzeJobEntry
+  >());
 
 function getPositiveIntegerEnv(name: string, fallback: number) {
   const value = Number.parseInt(process.env[name] ?? "", 10);
@@ -69,6 +80,13 @@ export function getAnalysisJobTtlMs() {
   return getPositiveIntegerEnv(
     "ANALYSIS_JOB_TTL_MS",
     DEFAULT_ANALYSIS_JOB_TTL_MS
+  );
+}
+
+export function getAnalysisJobTimeoutMs() {
+  return getPositiveIntegerEnv(
+    "ANALYSIS_JOB_TIMEOUT_MS",
+    DEFAULT_ANALYSIS_JOB_TIMEOUT_MS
   );
 }
 
@@ -136,11 +154,43 @@ function wait(ms: number) {
   });
 }
 
-async function acquireJobAnalysisSlot() {
+function createJobTimeoutError() {
+  const error = new Error("ANALYZE_JOB_TIMEOUT");
+  error.name = "TimeoutError";
+  return error;
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number) {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeout = setTimeout(() => {
+          reject(createJobTimeoutError());
+        }, timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
+}
+
+async function acquireJobAnalysisSlot(timeoutMs: number) {
+  const deadlineAt = Date.now() + timeoutMs;
   let slot = tryAcquireAnalysisSlot();
 
   while (!slot.ok) {
-    await wait(ANALYSIS_JOB_SLOT_RETRY_MS);
+    const remainingMs = deadlineAt - Date.now();
+
+    if (remainingMs <= 0) {
+      throw createJobTimeoutError();
+    }
+
+    await wait(Math.min(ANALYSIS_JOB_SLOT_RETRY_MS, remainingMs));
     slot = tryAcquireAnalysisSlot();
   }
 
@@ -152,21 +202,33 @@ async function runJob(
   options: Required<CreateAnalyzeJobOptions>,
   cacheKey: string
 ) {
-  const analysisSlot = await acquireJobAnalysisSlot();
+  const jobStart = performance.now();
+  const jobTimeoutMs = getAnalysisJobTimeoutMs();
+  let analysisSlot:
+    | Awaited<ReturnType<typeof acquireJobAnalysisSlot>>
+    | undefined;
 
   try {
-    const result = await runAnalyzePipeline({
-      url: options.url,
-      language: options.language,
-      maxReviews: options.maxReviews,
-      selectedReviewLimit: options.selectedReviewLimit,
-      reviewTextMaxChars: options.reviewTextMaxChars,
-      onStage: (stage: AnalyzePipelineStage) => {
-        updateJob(jobId, {
-          status: stage
-        });
-      }
-    });
+    analysisSlot = await acquireJobAnalysisSlot(jobTimeoutMs);
+    const remainingTimeoutMs = Math.max(
+      1,
+      jobTimeoutMs - Math.round(performance.now() - jobStart)
+    );
+    const result = await withTimeout(
+      runAnalyzePipeline({
+        url: options.url,
+        language: options.language,
+        maxReviews: options.maxReviews,
+        selectedReviewLimit: options.selectedReviewLimit,
+        reviewTextMaxChars: options.reviewTextMaxChars,
+        onStage: (stage: AnalyzePipelineStage) => {
+          updateJob(jobId, {
+            status: stage
+          });
+        }
+      }),
+      remainingTimeoutMs
+    );
 
     if (!result.ok) {
       console.info("[ANALYZE_JOB_TIMING]", {
@@ -200,8 +262,30 @@ async function runJob(
       status: "completed",
       result: result.response
     });
+  } catch (error) {
+    if (error instanceof Error && error.message === "ANALYZE_JOB_TIMEOUT") {
+      console.info("[ANALYZE_JOB_TIMING]", {
+        jobId,
+        maxReviews: options.maxReviews,
+        selectedReviewLimit: options.selectedReviewLimit,
+        reviewTextMaxChars: options.reviewTextMaxChars,
+        stage: "job_timeout",
+        totalMs: Math.round(performance.now() - jobStart)
+      });
+      updateJob(jobId, {
+        status: "failed",
+        error: {
+          code: "ANALYZE_JOB_TIMEOUT",
+          message: "分析任务耗时过长，请稍后重试或减少评论数量。",
+          status: 504
+        }
+      });
+      return;
+    }
+
+    throw error;
   } finally {
-    analysisSlot.release();
+    analysisSlot?.release();
   }
 }
 
