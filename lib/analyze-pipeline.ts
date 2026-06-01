@@ -1,4 +1,7 @@
-import { analyzeFeedback } from "./ai-analysis.ts";
+import {
+  analyzeFeedback,
+  type FeedbackAnalysisDraft
+} from "./ai-analysis.ts";
 import { statusFromScrapeErrorCode } from "./api-errors.ts";
 import type {
   AnalysisResult,
@@ -36,6 +39,7 @@ export type AnalyzePipelineSuccess = {
     provider?: string;
     reviewCount: number;
     aiReviewCount: number;
+    aiStatus?: "completed" | "fallback";
     maxReviews: number;
     selectedReviewLimit?: number;
     reviewTextMaxChars: number;
@@ -133,51 +137,169 @@ function buildReviewsText(reviews: ReviewEvidence[], maxTextChars: number) {
     .join("\n\n---\n\n");
 }
 
-function normalizeEvidenceIndexes(value: unknown, reviewCount: number) {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  const indexes: number[] = [];
-
-  for (const item of value) {
-    const index =
-      typeof item === "number" ? item : Number.parseInt(String(item), 10);
-
-    if (
-      Number.isInteger(index) &&
-      index >= 1 &&
-      index <= reviewCount &&
-      !indexes.includes(index)
-    ) {
-      indexes.push(index);
-    }
-
-    if (indexes.length >= EVIDENCE_REVIEWS_PER_CARD) {
-      break;
-    }
-  }
-
-  return indexes;
-}
-
 function filterReviewsBySentiment(
   reviews: ReviewEvidence[],
   sentiment: ReviewSentiment
 ) {
+  return reviews.filter((review) => getReviewSentiment(review) === sentiment);
+}
+
+function getReviewSentiment(review: ReviewEvidence): ReviewSentiment {
+  if (typeof review.rating !== "number") {
+    return "neutral";
+  }
+
+  if (Number(review.rating) >= 4) {
+    return "positive";
+  }
+
+  if (Number(review.rating) <= 2) {
+    return "negative";
+  }
+
+  return "neutral";
+}
+
+function getSentimentCounts(reviews: ReviewEvidence[]) {
+  return reviews.reduce(
+    (counts, review) => {
+      counts[getReviewSentiment(review)] += 1;
+      return counts;
+    },
+    {
+      positive: 0,
+      neutral: 0,
+      negative: 0
+    } satisfies Record<ReviewSentiment, number>
+  );
+}
+
+function getPercentage(value: number, total: number) {
+  return total > 0 ? Math.round((value / total) * 100) : 0;
+}
+
+function getEmotionDistribution(reviews: ReviewEvidence[]) {
+  const counts = getSentimentCounts(reviews);
+  const total = reviews.length;
+  const positive = getPercentage(counts.positive, total);
+  const negative = getPercentage(counts.negative, total);
+
+  return {
+    positive,
+    neutral: Math.max(0, 100 - positive - negative),
+    negative
+  };
+}
+
+function clampScore(value: number) {
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function getComprehensiveScore(reviews: ReviewEvidence[]) {
   const ratedReviews = reviews.filter(
     (review) => typeof review.rating === "number"
   );
 
-  if (sentiment === "positive") {
-    return ratedReviews.filter((review) => Number(review.rating) >= 4);
+  if (ratedReviews.length > 0) {
+    const averageRating =
+      ratedReviews.reduce((sum, review) => sum + Number(review.rating), 0) /
+      ratedReviews.length;
+
+    return clampScore(((averageRating - 1) / 4) * 100);
   }
 
-  if (sentiment === "negative") {
-    return ratedReviews.filter((review) => Number(review.rating) <= 2);
+  const distribution = getEmotionDistribution(reviews);
+
+  return clampScore(
+    distribution.positive + distribution.neutral * 0.55 - distribution.negative * 0.25
+  );
+}
+
+function isHighValueReview(review: ReviewEvidence) {
+  const text = `${review.title ?? ""} ${review.text}`.trim();
+
+  return (
+    text.length >= 80 ||
+    HIGH_VALUE_KEYWORD_RE.test(text) ||
+    (typeof review.rating === "number" && Number(review.rating) <= 2)
+  );
+}
+
+function getHighValueSignalCount(reviews: ReviewEvidence[]) {
+  return reviews.filter(isHighValueReview).length;
+}
+
+function normalizeInsightList(items: string[], fallback: string[]) {
+  const normalized = items
+    .map((item) => item.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .slice(0, 3);
+
+  return normalized.length > 0 ? normalized : fallback;
+}
+
+function getFallbackDraft(
+  reviews: ReviewEvidence[],
+  language: Language
+): FeedbackAnalysisDraft {
+  const distribution = getEmotionDistribution(reviews);
+  const hasNegativeSkew = distribution.negative >= distribution.positive;
+
+  if (language === "en") {
+    return {
+      coreSummary: hasNegativeSkew
+        ? "Users still face stability and workflow friction around the core experience."
+        : "Users value the core experience, while stability and workflow gaps remain.",
+      signalCluster: hasNegativeSkew ? "Stability friction" : "Core value and gaps",
+      positiveFocus: "Core product value",
+      highFreqPainPoints: ["Stability and workflow friction"],
+      featureRequests: ["Improve stability and key flows"]
+    };
   }
 
-  return ratedReviews.filter((review) => Number(review.rating) === 3);
+  if (language === "zh-TW") {
+    return {
+      coreSummary: hasNegativeSkew
+        ? "用戶仍在核心體驗中遇到穩定性與流程阻力。"
+        : "用戶認可核心價值，但穩定性與關鍵流程仍需改善。",
+      signalCluster: hasNegativeSkew ? "穩定性阻力" : "核心價值與缺口",
+      positiveFocus: "核心功能價值",
+      highFreqPainPoints: ["穩定性與流程阻力"],
+      featureRequests: ["提升穩定性和關鍵流程"]
+    };
+  }
+
+  return {
+    coreSummary: hasNegativeSkew
+      ? "用户仍在核心体验中遇到稳定性与流程阻力。"
+      : "用户认可核心价值，但稳定性与关键流程仍需改善。",
+    signalCluster: hasNegativeSkew ? "稳定性阻力" : "核心价值与缺口",
+    positiveFocus: "核心功能价值",
+    highFreqPainPoints: ["稳定性与流程阻力"],
+    featureRequests: ["提升稳定性和关键流程"]
+  };
+}
+
+function normalizeDraft(
+  draft: FeedbackAnalysisDraft | undefined,
+  reviews: ReviewEvidence[],
+  language: Language
+) {
+  const fallback = getFallbackDraft(reviews, language);
+
+  return {
+    coreSummary: draft?.coreSummary?.trim() || fallback.coreSummary,
+    signalCluster: draft?.signalCluster?.trim() || fallback.signalCluster,
+    positiveFocus: draft?.positiveFocus?.trim() || fallback.positiveFocus,
+    highFreqPainPoints: normalizeInsightList(
+      draft?.highFreqPainPoints ?? [],
+      fallback.highFreqPainPoints
+    ),
+    featureRequests: normalizeInsightList(
+      draft?.featureRequests ?? [],
+      fallback.featureRequests
+    )
+  };
 }
 
 function getFallbackEvidenceIds(
@@ -202,17 +324,53 @@ function getFallbackEvidenceIds(
   return ids;
 }
 
-function resolveEvidenceIds(
-  rawIndexes: unknown,
+function getReviewSearchText(review: ReviewEvidence) {
+  return `${review.title ?? ""} ${review.text}`.toLowerCase();
+}
+
+function tokenizeForOverlap(value: string) {
+  return new Set(
+    (value.toLowerCase().match(/[a-z0-9]{3,}|[\u4e00-\u9fff]/g) ?? []).filter(
+      Boolean
+    )
+  );
+}
+
+function scoreReviewForInsight(review: ReviewEvidence, insightTokens: Set<string>) {
+  if (insightTokens.size === 0) {
+    return 0;
+  }
+
+  const reviewTokens = tokenizeForOverlap(getReviewSearchText(review));
+  let overlap = 0;
+
+  insightTokens.forEach((token) => {
+    if (reviewTokens.has(token)) {
+      overlap += 1;
+    }
+  });
+
+  return overlap;
+}
+
+function resolveInsightEvidenceIds(
+  insight: string,
   reviews: ReviewEvidence[],
   fallbackSentiment: ReviewSentiment,
-  fallbackOffset: number,
-  analysisIndexToFullIndex?: Map<number, number>
+  fallbackOffset: number
 ) {
-  const ids = normalizeEvidenceIndexes(rawIndexes, reviews.length)
-    .map((index) => analysisIndexToFullIndex?.get(index) ?? index)
-    .map((index) => reviews[index - 1]?.snippetId)
-    .filter((id): id is string => Boolean(id));
+  const insightTokens = tokenizeForOverlap(insight);
+  const ids = reviews
+    .map((review) => ({
+      review,
+      score:
+        scoreReviewForInsight(review, insightTokens) +
+        (isHighValueReview(review) ? 0.25 : 0)
+    }))
+    .filter((item) => item.score > 0)
+    .sort((left, right) => right.score - left.score)
+    .slice(0, EVIDENCE_REVIEWS_PER_CARD)
+    .map((item) => item.review.snippetId);
 
   if (ids.length > 0) {
     return ids;
@@ -221,59 +379,54 @@ function resolveEvidenceIds(
   return getFallbackEvidenceIds(reviews, fallbackSentiment, fallbackOffset);
 }
 
+function getTypicalVoiceReview(
+  reviews: ReviewEvidence[],
+  sentiment: ReviewSentiment
+) {
+  const candidates = filterReviewsBySentiment(reviews, sentiment);
+
+  if (candidates.length === 0) {
+    return undefined;
+  }
+
+  return [...candidates].sort(
+    (left, right) => scoreReviewForAnalysis(right) - scoreReviewForAnalysis(left)
+  )[0];
+}
+
+function getTypicalVoices(reviews: ReviewEvidence[]) {
+  return {
+    positive: getTypicalVoiceReview(reviews, "positive")?.text ?? "",
+    neutral: getTypicalVoiceReview(reviews, "neutral")?.text ?? "",
+    negative: getTypicalVoiceReview(reviews, "negative")?.text ?? ""
+  };
+}
+
 function buildEvidenceMap(
   analysis: AnalysisResult,
-  reviews: ReviewEvidence[],
-  analysisIndexToFullIndex?: Map<number, number>
+  reviews: ReviewEvidence[]
 ): EvidenceMap {
-  const painPointEvidence =
-    analysis.deepInsights.painPointEvidenceReviewIndexes ?? [];
-  const featureRequestEvidence =
-    analysis.deepInsights.featureRequestEvidenceReviewIndexes ?? [];
-  const typicalVoiceEvidence =
-    analysis.typicalVoiceEvidenceReviewIndexes ?? {};
-
   return {
     painPoints: analysis.deepInsights.highFreqPainPoints.map((_, index) =>
-      resolveEvidenceIds(
-        painPointEvidence[index],
+      resolveInsightEvidenceIds(
+        analysis.deepInsights.highFreqPainPoints[index] ?? "",
         reviews,
         "negative",
-        index,
-        analysisIndexToFullIndex
+        index
       )
     ),
     featureRequests: analysis.deepInsights.featureRequests.map((_, index) =>
-      resolveEvidenceIds(
-        featureRequestEvidence[index],
+      resolveInsightEvidenceIds(
+        analysis.deepInsights.featureRequests[index] ?? "",
         reviews,
-        "positive",
-        index,
-        analysisIndexToFullIndex
+        "negative",
+        index
       )
     ),
     typicalVoices: {
-      positive: resolveEvidenceIds(
-        typicalVoiceEvidence.positive,
-        reviews,
-        "positive",
-        0,
-        analysisIndexToFullIndex
-      ),
-      neutral: resolveEvidenceIds(
-        typicalVoiceEvidence.neutral,
-        reviews,
-        "neutral",
-        0,
-        analysisIndexToFullIndex
-      ),
-      negative: resolveEvidenceIds(
-        typicalVoiceEvidence.negative,
-        reviews,
-        "negative",
-        0,
-        analysisIndexToFullIndex
-      )
+      positive: getFallbackEvidenceIds(reviews, "positive", 0),
+      neutral: getFallbackEvidenceIds(reviews, "neutral", 0),
+      negative: getFallbackEvidenceIds(reviews, "negative", 0)
     }
   };
 }
@@ -352,14 +505,33 @@ function selectReviewsForAnalysis(
   return reviews.filter((_, index) => selectedIndexes.has(index));
 }
 
-function buildAnalysisIndexToFullIndex(selectedReviews: ReviewEvidence[]) {
-  const map = new Map<number, number>();
+function composeAnalysisResult(
+  draft: FeedbackAnalysisDraft | undefined,
+  reviews: ReviewEvidence[],
+  language: Language
+): AnalysisResult {
+  const normalizedDraft = normalizeDraft(draft, reviews, language);
+  const emotionDistribution = getEmotionDistribution(reviews);
 
-  selectedReviews.forEach((review, index) => {
-    map.set(index + 1, review.reviewIndex);
-  });
-
-  return map;
+  return {
+    insightPreview: {
+      comprehensiveScore: getComprehensiveScore(reviews),
+      coreSummary: normalizedDraft.coreSummary
+    },
+    coreMetrics: {
+      totalReviews: reviews.length,
+      highValueSignals: getHighValueSignalCount(reviews),
+      signalCluster: normalizedDraft.signalCluster,
+      positiveRatio: emotionDistribution.positive,
+      positiveFocus: normalizedDraft.positiveFocus
+    },
+    emotionDistribution,
+    deepInsights: {
+      highFreqPainPoints: normalizedDraft.highFreqPainPoints,
+      featureRequests: normalizedDraft.featureRequests
+    },
+    typicalVoices: getTypicalVoices(reviews)
+  };
 }
 
 export async function runAnalyzePipeline({
@@ -403,16 +575,16 @@ export async function runAnalyzePipeline({
 
   if (scrapeResult.count === 0) {
     const analysis = createEmptyAnalysisResult();
-    const response: AnalyzeApiResponse = {
-      sourceUrl: url,
-      language,
-      scrapeSource: scrapeResult.source,
-      scrapeProvider: scrapeResult.provider,
-      reviewCount: scrapeResult.count,
-      reviews,
-      evidence: buildEvidenceMap(analysis, reviews),
-      analysis
-    };
+	    const response: AnalyzeApiResponse = {
+	      sourceUrl: url,
+	      language,
+	      scrapeSource: scrapeResult.source,
+	      scrapeProvider: scrapeResult.provider,
+	      reviewCount: scrapeResult.count,
+	      reviews,
+	      evidence: buildEvidenceMap(analysis, reviews),
+	      analysis
+	    };
 
     return {
       ok: true,
@@ -436,72 +608,57 @@ export async function runAnalyzePipeline({
   onStage?.("analyzing");
 
   const selectedReviews = selectReviewsForAnalysis(reviews, selectedReviewLimit);
-  const analysisIndexToFullIndex = buildAnalysisIndexToFullIndex(selectedReviews);
   const analysisStart = performance.now();
+  let aiStatus: "completed" | "fallback" = "completed";
+  let draft: FeedbackAnalysisDraft | undefined;
 
   try {
-    const analysis = await analyzeFeedback(
+    draft = await analyzeFeedback(
       buildReviewsText(selectedReviews, reviewTextMaxChars),
       modelType
     );
-    const response: AnalyzeApiResponse = {
-      sourceUrl: url,
-      language,
-      scrapeSource: scrapeResult.source,
-      scrapeProvider: scrapeResult.provider,
-      reviewCount: scrapeResult.count,
-      reviews,
-      evidence: buildEvidenceMap(analysis, reviews, analysisIndexToFullIndex),
-      analysis
-    };
-
-    return {
-      ok: true,
-      response,
-      timings: {
-        scrapeMs,
-        analysisMs: elapsedMs(analysisStart),
-        totalMs: elapsedMs(requestStart)
-      },
-      meta: {
-        source: scrapeResult.source,
-        provider: scrapeResult.provider,
-        reviewCount: scrapeResult.count,
-        aiReviewCount: selectedReviews.length,
-        maxReviews,
-        selectedReviewLimit,
-        reviewTextMaxChars
-      }
-    };
   } catch (error) {
-    const isTimeout =
-      error instanceof Error && error.message === "AI_ANALYSIS_TIMEOUT";
-
-    return {
-      ok: false,
-      error: {
-        code: isTimeout ? "AI_ANALYSIS_TIMEOUT" : "AI_ANALYSIS_FAILED",
-        message: isTimeout
-          ? "AI 分析耗时过长，请稍后重试或减少评论数量。"
-          : "AI 分析服务暂时不可用，请稍后重试。"
-      },
-      status: isTimeout ? 504 : 502,
-      timings: {
-        scrapeMs,
-        totalMs: elapsedMs(requestStart)
-      },
-      meta: {
-        source: scrapeResult.source,
-        provider: scrapeResult.provider,
-        reviewCount: scrapeResult.count,
-        aiReviewCount: selectedReviews.length,
-        maxReviews,
-        selectedReviewLimit,
-        reviewTextMaxChars,
-        stage: "analysis_failed"
-      }
-    };
+    aiStatus = "fallback";
+    console.info("[AI_ANALYSIS_FALLBACK]", {
+      source: scrapeResult.source,
+      provider: scrapeResult.provider,
+      reviewCount: scrapeResult.count,
+      aiReviewCount: selectedReviews.length,
+      error
+    });
   }
+
+  const analysis = composeAnalysisResult(draft, reviews, language);
+  const response: AnalyzeApiResponse = {
+    sourceUrl: url,
+    language,
+    scrapeSource: scrapeResult.source,
+    scrapeProvider: scrapeResult.provider,
+    reviewCount: scrapeResult.count,
+    reviews,
+    evidence: buildEvidenceMap(analysis, reviews),
+    analysis
+  };
+
+  return {
+    ok: true,
+    response,
+    timings: {
+      scrapeMs,
+      analysisMs: elapsedMs(analysisStart),
+      totalMs: elapsedMs(requestStart)
+    },
+    meta: {
+      source: scrapeResult.source,
+      provider: scrapeResult.provider,
+      reviewCount: scrapeResult.count,
+      aiReviewCount: selectedReviews.length,
+      aiStatus,
+      maxReviews,
+      selectedReviewLimit,
+      reviewTextMaxChars
+    }
+  };
 }
 
 export function __selectReviewsForAnalysisForTest(

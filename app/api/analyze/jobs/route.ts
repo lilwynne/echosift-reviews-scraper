@@ -70,11 +70,14 @@ export async function POST(request: Request) {
     return jsonError("RATE_LIMITED", "请求过于频繁，请稍后再试。", 429);
   }
 
-  return NextResponse.json(
-    createAnalyzeJob({
-      url: body.url,
-      language: body.language as Language
-    }),
-    { status: 202 }
-  );
+  const result = await createAnalyzeJob({
+    url: body.url,
+    language: body.language as Language
+  });
+
+  if (!result.ok) {
+    return jsonError(result.error.code, result.error.message, result.status);
+  }
+
+  return NextResponse.json(result.job, { status: 202 });
 }

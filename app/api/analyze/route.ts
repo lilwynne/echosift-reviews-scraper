@@ -22,7 +22,8 @@ const validLanguages = new Set<Language>(
   languages.map((language) => language.code)
 );
 const DEFAULT_ANALYSIS_MAX_REVIEWS = 50;
-const DEFAULT_ANALYSIS_REVIEW_TEXT_MAX_CHARS = 1200;
+const DEFAULT_ANALYSIS_SELECTED_REVIEW_LIMIT = 12;
+const DEFAULT_ANALYSIS_REVIEW_TEXT_MAX_CHARS = 280;
 
 function getPositiveIntegerEnv(name: string, fallback: number) {
   const value = Number.parseInt(process.env[name] ?? "", 10);
@@ -40,6 +41,13 @@ function getAnalysisReviewTextMaxChars() {
   return getPositiveIntegerEnv(
     "ANALYSIS_REVIEW_TEXT_MAX_CHARS",
     DEFAULT_ANALYSIS_REVIEW_TEXT_MAX_CHARS
+  );
+}
+
+function getAnalysisSelectedReviewLimit() {
+  return getPositiveIntegerEnv(
+    "ANALYSIS_SELECTED_REVIEW_LIMIT",
+    DEFAULT_ANALYSIS_SELECTED_REVIEW_LIMIT
   );
 }
 
@@ -90,9 +98,11 @@ export async function POST(request: Request) {
 
   const language = body.language as Language;
   const analysisMaxReviews = getAnalysisMaxReviews();
+  const analysisSelectedReviewLimit = getAnalysisSelectedReviewLimit();
   const analysisReviewTextMaxChars = getAnalysisReviewTextMaxChars();
   const cacheKey = createAnalysisCacheKey(body.url, language, {
     maxReviews: analysisMaxReviews,
+    selectedReviewLimit: analysisSelectedReviewLimit,
     reviewTextMaxChars: analysisReviewTextMaxChars
   });
   const rateLimit = checkRateLimit({
@@ -125,6 +135,7 @@ export async function POST(request: Request) {
       url: body.url,
       language,
       maxReviews: analysisMaxReviews,
+      selectedReviewLimit: analysisSelectedReviewLimit,
       reviewTextMaxChars: analysisReviewTextMaxChars
     });
 

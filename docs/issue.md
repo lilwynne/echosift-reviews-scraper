@@ -11,7 +11,7 @@ EchoSift needs to move from a purely mocked dashboard toward a real review-inges
 - Product Hunt uses the official Product Hunt API v2 GraphQL endpoint with the user's Developer Token.
 - Apple App Store uses Apple Search for slug-only links, Apple RSS as the first review source, and App Store web page parsing as a fallback when RSS returns no reviews; it does not require a token.
 - Google Play uses `google-play-scraper` and does not require a token.
-- The Chrome extension has a lighter content-script URL watcher, background in-flight request dedupe, session-memory result caching, and a 90-second analysis request timeout.
+- The Chrome extension has a lighter content-script URL watcher, background in-flight request dedupe, session-memory result caching, and async job polling with a 120-second analysis request timeout.
 - The old Product Hunt crawler/deployment path has been removed from the repo.
 - The frontend now shows a single free mode, no auth controls, and no model picker.
 - The "Real-time Insight Preview" hero module has been rebuilt with idle, scanning, and reveal states using Framer Motion spring animations.
@@ -24,9 +24,9 @@ EchoSift needs to move from a purely mocked dashboard toward a real review-inges
 - Use `provider` to identify the active backend provider for each source.
 - Use `REVIEWS_MAX_REVIEWS` and `REVIEWS_REQUEST_TIMEOUT_MS` for ingestion limits/timeouts.
 - Use `ANALYSIS_MAX_REVIEWS=50` by default for `/api/analyze`; `/api/reviews` keeps the broader ingestion default.
-- Use webpage-only async analysis jobs for the homepage. Web jobs default to `WEB_ANALYSIS_MAX_REVIEWS=50`, select `WEB_ANALYSIS_SELECTED_REVIEW_LIMIT=24` high-value reviews for AI, and trim selected review text to `WEB_ANALYSIS_REVIEW_TEXT_MAX_CHARS=500`.
+- Use async analysis jobs for the homepage and Chrome extension. Web jobs default to `WEB_ANALYSIS_MAX_REVIEWS=50`, select `WEB_ANALYSIS_SELECTED_REVIEW_LIMIT=12` high-value reviews for AI, and trim selected review text to `WEB_ANALYSIS_REVIEW_TEXT_MAX_CHARS=280`.
 - Keep `/api/analyze` response compatible with the existing mock dashboard while adding `scrapeSource`, `reviewCount`, and `reviews`.
-- Keep the Chrome extension on synchronous `/api/analyze` for compatibility.
+- Keep `/api/analyze` as a synchronous compatibility endpoint, but move first-party clients to async jobs.
 - Keep extension type checking separate from the Next.js app because Plasmo uses its own `~src/*` alias and `extension/tsconfig.json`.
 
 ## Supported Sources
@@ -125,9 +125,19 @@ Smoke-test notes:
 - Follow-up fix: local startup now exports the macOS HTTPS proxy to the Next.js backend, and Google Play scraping falls back to parsing first-page web reviews when the batchexecute review endpoint times out or disconnects.
 - Validation completed: `npm test`, `npm run build`, and a local browser check on `http://localhost:3000`.
 
+### 2026-06-01: App Store and Google Play jobs timed out in AI analysis
+
+- Symptom: production web jobs for App Store and Google Play failed near 45 seconds with `AI_ANALYSIS_TIMEOUT`.
+- Root cause: the AI prompt required a full dashboard JSON with evidence indexes and metrics; even small review sets could take nearly the entire 30-second AI timeout.
+- Fix: AI now returns only a lightweight insight draft, while backend code computes metrics, sentiment, typical voices, and evidence deterministically. AI timeout or parse failure falls back to deterministic analysis instead of failing the job.
+- Async job architecture: production web jobs now require Upstash Redis and QStash. Redis stores job state, active-job dedupe, and completed result cache; QStash invokes the signed worker route `/api/analyze/jobs/run`.
+- Client alignment: the homepage polls for up to 120 seconds, and the Chrome extension now uses the same async job API instead of the synchronous `/api/analyze` endpoint.
+- Google Play support fix: web fallback disables `got` retries and uses a short fallback timeout so scraping does not consume the whole worker budget.
+
 ## Remaining Todo
 
 - Configure backend `.env.local` with `PRODUCT_HUNT_API_TOKEN`.
+- Configure production with Upstash Redis/QStash env vars and `APP_BASE_URL=https://echosift.online`.
 - Rerun live Product Hunt extraction against known Product Hunt URLs through `/api/reviews`.
 - Test Apple RSS plus App Store web fallback from the deployment network with target customer app links.
 - Live-test slug-only App Store links from the deployment network and confirm Apple Search resolves the intended app when names are ambiguous.

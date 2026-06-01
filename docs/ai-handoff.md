@@ -14,11 +14,11 @@ The frontend prototype and UI are considered confirmed by the user. Important co
 - Latest ingestion fix supports App Store URLs without an embedded `id{APP_ID}` segment, such as `https://apps.apple.com/cn/app/soul/`, by resolving the app slug through Apple Search before fetching Apple RSS reviews.
 - Latest App Store ingestion work keeps Apple RSS as the first source and falls back to parsing the App Store product page's `serialized-server-data` reviews when RSS returns an empty feed.
 - Latest empty-review performance fix makes `/api/analyze` return the standard empty analysis result immediately when ingestion returns zero reviews, instead of spending an AI request on empty input.
-- Latest performance work optimized Product Hunt analysis latency. The slow path was `/api/analyze` fetching up to `REVIEWS_MAX_REVIEWS=100` comments before sending the full comment text to AI. `/api/analyze` now uses the analysis-specific `ANALYSIS_MAX_REVIEWS` default of 50 and trims each review text to `ANALYSIS_REVIEW_TEXT_MAX_CHARS` default of 1200 characters before calling SiliconFlow.
-- Latest web performance work added a webpage-only async analysis job flow. The homepage now submits `POST /api/analyze/jobs` and polls `GET /api/analyze/jobs/{jobId}` every 1.5 seconds. Web jobs default to fetching 50 reviews, selecting the top 24 high-value reviews for AI, and trimming each selected review to 500 characters. The Chrome extension still uses the existing synchronous `/api/analyze` endpoint.
-- Latest reliability fix adds a process-level shared job store plus hard timeouts to Google Play scraping, AI analysis, and webpage jobs so the UI fails cleanly instead of polling indefinitely or hitting a route-local job 404. Defaults: `REVIEWS_REQUEST_TIMEOUT_MS=30000`, `AI_ANALYSIS_TIMEOUT_MS=30000`, and `ANALYSIS_JOB_TIMEOUT_MS=45000`.
+- Latest reliability work moved production web jobs to Upstash Redis + QStash. `POST /api/analyze/jobs` stores durable job state, QStash calls `/api/analyze/jobs/run`, and `GET /api/analyze/jobs/{jobId}` reads the durable job/result record.
+- Latest AI performance work changed the model output to a lightweight insight draft. Backend code now computes sentiment metrics, scores, typical voices, and evidence locally; AI timeout or invalid JSON falls back to deterministic analysis instead of failing a non-empty job.
+- Defaults now send 12 selected high-value reviews at 280 chars each, with `AI_ANALYSIS_TIMEOUT_MS=45000`, `AI_ANALYSIS_MAX_TOKENS=700`, and `ANALYSIS_JOB_TIMEOUT_MS=120000`.
 - Local Google Play reliability now also depends on proxy-aware backend requests: the desktop launcher exports the macOS HTTPS proxy when present, and `lib/reviews.ts` falls back to `google-play-web-page` first-page review parsing when the scraper endpoint fails.
-- Latest extension performance work removed the content script's full-body MutationObserver and 500ms polling, added event-driven SPA URL detection, background in-flight request dedupe, session-memory success caching, and a 90-second analysis timeout.
+- Latest extension performance work removed the content script's full-body MutationObserver and 500ms polling, added event-driven SPA URL detection, background in-flight request dedupe, session-memory success caching, and moved extension requests to the async job API with a 120-second timeout.
 - The old Product Hunt crawler/deployment path has been removed from this repo. There is no Apify actor directory, actor deploy script, or actor GitHub workflow left in the project.
 - Latest repository hygiene work added commented `.gitignore` sections and ignores local cache/tool output folders such as `.echosift/`, `.playwright-cli/`, `.cache/`, and `.npm-cache/`. `.echosift/` and `.playwright-cli/` were removed from the Git index with `git rm --cached`, so existing local files remain on disk but future pushes should not include them.
 
@@ -90,16 +90,17 @@ http://127.0.0.1:3000
   - Logs `[ANALYZE_TIMING]` with scrape and analysis durations for backend performance debugging.
   - Returns `analysis` with the raw SiliconFlow model result. It no longer returns `dashboard`, `kpis`, `sentiment`, `trendData`, or `kanban`.
 - `app/api/analyze/jobs/`
-  - Webpage-only async analysis job API.
-  - `POST /api/analyze/jobs` creates an in-memory job and returns `{ jobId, status }`.
+  - Async analysis job API used by the homepage and Chrome extension.
+  - `POST /api/analyze/jobs` creates or reuses a durable job and returns `{ jobId, status }`.
   - `GET /api/analyze/jobs/{jobId}` returns queued/scraping/analyzing/completed/failed state and includes `result` once completed.
-  - Successful non-empty job results are cached through the same analysis cache as `/api/analyze`, using `analysis:v3` keys with analysis parameters included.
+  - `POST /api/analyze/jobs/run` is the internal QStash-signed worker route.
+  - Successful non-empty job results are cached in Redis for production jobs.
 - `lib/analyze-pipeline.ts`
   - Shared scrape + AI analysis pipeline used by synchronous `/api/analyze` and webpage jobs.
-  - Handles normalized review evidence, AI prompt formatting, empty-review short-circuiting, and AI evidence-index remapping when a selected review subset is analyzed.
+  - Handles normalized review evidence, lightweight AI prompt formatting, empty-review short-circuiting, local metric/evidence composition, and deterministic fallback when AI fails.
 - `lib/analyze-jobs.ts`
-  - In-memory analyze job store with a 30-minute default TTL.
-  - Web job defaults: `WEB_ANALYSIS_MAX_REVIEWS=50`, `WEB_ANALYSIS_SELECTED_REVIEW_LIMIT=24`, `WEB_ANALYSIS_REVIEW_TEXT_MAX_CHARS=500`, `ANALYSIS_JOB_TIMEOUT_MS=45000`, `AI_ANALYSIS_TIMEOUT_MS=30000`.
+  - Production uses Upstash Redis for job/result/cache state and QStash for worker delivery; local/test falls back to the in-memory adapter.
+  - Web job defaults: `WEB_ANALYSIS_MAX_REVIEWS=50`, `WEB_ANALYSIS_SELECTED_REVIEW_LIMIT=12`, `WEB_ANALYSIS_REVIEW_TEXT_MAX_CHARS=280`, `ANALYSIS_JOB_TIMEOUT_MS=120000`, `AI_ANALYSIS_TIMEOUT_MS=45000`.
   - Reuses the existing process-level analysis concurrency slot before executing the background job.
 - `app/api/reviews/route.ts`
   - Backend API route for testing raw review ingestion.
@@ -323,13 +324,22 @@ Optional environment variables:
 REVIEWS_MAX_REVIEWS=100
 REVIEWS_REQUEST_TIMEOUT_MS=30000
 ANALYSIS_MAX_REVIEWS=50
-ANALYSIS_REVIEW_TEXT_MAX_CHARS=1200
+ANALYSIS_SELECTED_REVIEW_LIMIT=12
+ANALYSIS_REVIEW_TEXT_MAX_CHARS=280
+UPSTASH_REDIS_REST_URL=https://...
+UPSTASH_REDIS_REST_TOKEN=...
+QSTASH_TOKEN=...
+QSTASH_CURRENT_SIGNING_KEY=...
+QSTASH_NEXT_SIGNING_KEY=...
+APP_BASE_URL=https://echosift.online
 WEB_ANALYSIS_MAX_REVIEWS=50
-WEB_ANALYSIS_SELECTED_REVIEW_LIMIT=24
-WEB_ANALYSIS_REVIEW_TEXT_MAX_CHARS=500
+WEB_ANALYSIS_SELECTED_REVIEW_LIMIT=12
+WEB_ANALYSIS_REVIEW_TEXT_MAX_CHARS=280
 ANALYSIS_JOB_TTL_MS=1800000
-ANALYSIS_JOB_TIMEOUT_MS=45000
-AI_ANALYSIS_TIMEOUT_MS=30000
+ANALYSIS_JOB_TIMEOUT_MS=120000
+AI_ANALYSIS_TIMEOUT_MS=45000
+AI_ANALYSIS_MAX_TOKENS=700
+GOOGLE_PLAY_WEB_FALLBACK_TIMEOUT_MS=8000
 ```
 
 Implementation details:
@@ -364,18 +374,18 @@ Implementation details:
 - Product Hunt analysis was slow because `/api/analyze` waited for full review ingestion and then sent every fetched review body to the AI provider.
 - The first optimization keeps response shape and UI untouched while reducing default analysis input size:
   - `ANALYSIS_MAX_REVIEWS=50` limits analysis ingestion to the first page for Product Hunt.
-  - `ANALYSIS_REVIEW_TEXT_MAX_CHARS=1200` caps each review body in the AI prompt.
+  - `ANALYSIS_SELECTED_REVIEW_LIMIT=12` and `ANALYSIS_REVIEW_TEXT_MAX_CHARS=280` cap the synchronous compatibility prompt.
   - `[ANALYZE_TIMING]` server logs expose scrape, analysis, and total durations.
 - The webpage now uses async jobs for better perceived latency and larger evidence collection:
   - The browser submits `POST /api/analyze/jobs`, then polls `GET /api/analyze/jobs/{jobId}` every 1.5 seconds.
   - Status maps to existing loading UI steps: queued/scraping, analyzing, completed.
-  - Jobs default to fetching 50 reviews, selecting 24 high-value reviews for AI, and trimming each selected review to 500 characters.
+  - Jobs default to fetching 50 reviews, selecting 12 high-value reviews for AI, and trimming each selected review to 280 characters.
   - Selection favors reviews with ratings, longer text, pain/request keywords, votes, and recency.
-  - Because the AI sees a subset, evidence indexes are remapped from AI prompt indexes back to the full `reviews` evidence pool before the dashboard receives them.
+  - AI returns only a lightweight insight draft; metrics, typical voices, and evidence IDs are built locally from the full `reviews` evidence pool.
 - Analysis cache keys now use `analysis:v3` and include normalized URL, language, max review count, selected review limit, review text character cap, and model type.
 - `scripts/test-review-ingestion.mjs` covers the `maxReviews` override and verifies Product Hunt stops pagination when the requested limit is reached.
 - App Store ingestion tests cover RSS-first behavior, RSS-empty web fallback parsing, and missing `serialized-server-data` returning an empty result without throwing.
-- `scripts/test-analyze-route.mjs` covers the zero-review `/api/analyze` short-circuit path, job completion, cache-hit jobs, failed jobs, 50-review ingestion, 24-review AI selection, job timeout, and evidence remapping.
+- `scripts/test-analyze-route.mjs` covers the zero-review `/api/analyze` short-circuit path, job completion, worker execution, cache-hit jobs, failed jobs, 50-review ingestion, 12-review AI selection, AI fallback, job timeout, and local evidence mapping.
 
 Error response format:
 

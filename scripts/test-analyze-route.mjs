@@ -6,6 +6,7 @@ import { createEmptyAnalysisResult } from "../lib/empty-analysis.ts";
 const originalApiKey = process.env.SILICONFLOW_API_KEY;
 const originalRateLimit = process.env.ANALYZE_RATE_LIMIT_MAX_REQUESTS;
 const originalAnalysisJobTimeout = process.env.ANALYSIS_JOB_TIMEOUT_MS;
+const originalAiAnalysisTimeout = process.env.AI_ANALYSIS_TIMEOUT_MS;
 const originalReviewRequestTimeout = process.env.REVIEWS_REQUEST_TIMEOUT_MS;
 const originalFetch = globalThis.fetch;
 const originalConsoleInfo = console.info;
@@ -17,7 +18,10 @@ const { __resetApiGuardsForTest } = await import("../lib/api-guards.ts");
 const { __setAnalyzeFeedbackClientFactoryForTest } = await import(
   "../lib/ai-analysis.ts"
 );
-const { __clearAnalyzeJobsForTest } = await import("../lib/analyze-jobs.ts");
+const {
+  __clearAnalyzeJobsForTest,
+  __setAnalyzeJobQueuePublisherForTest
+} = await import("../lib/analyze-jobs.ts");
 const { __selectReviewsForAnalysisForTest } = await import(
   "../lib/analyze-pipeline.ts"
 );
@@ -26,40 +30,16 @@ const { POST: POST_JOB } = await import("../app/api/analyze/jobs/route.ts");
 const { GET: GET_JOB } = await import(
   "../app/api/analyze/jobs/[jobId]/route.ts"
 );
+const { POST: POST_RUN_JOB } = await import(
+  "../app/api/analyze/jobs/run/route.ts"
+);
 
-const sampleAnalysis = {
-  insightPreview: {
-    comprehensiveScore: 80,
-    coreSummary: "用户认可核心能力，但希望文件打开和工作流更稳定"
-  },
-  coreMetrics: {
-    totalReviews: 2,
-    highValueSignals: 2,
-    signalCluster: "知识库文件处理",
-    positiveRatio: 100,
-    positiveFocus: "知识库能力"
-  },
-  emotionDistribution: {
-    positive: 100,
-    neutral: 0,
-    negative: 0
-  },
-  deepInsights: {
-    highFreqPainPoints: ["文件打开报错"],
-    featureRequests: ["增加工作流"],
-    painPointEvidenceReviewIndexes: [[1]],
-    featureRequestEvidenceReviewIndexes: [[2]]
-  },
-  typicalVoices: {
-    positive: "建议知识库加入工作流功能。",
-    neutral: "",
-    negative: "个人文件库的打开需要优化。"
-  },
-  typicalVoiceEvidenceReviewIndexes: {
-    positive: [2],
-    neutral: [],
-    negative: [1]
-  }
+const sampleDraft = {
+  coreSummary: "用户认可核心能力，但希望文件打开和工作流更稳定",
+  signalCluster: "知识库文件处理",
+  positiveFocus: "知识库能力",
+  highFreqPainPoints: ["文件打开报错"],
+  featureRequests: ["增加工作流"]
 };
 
 function restoreEnv() {
@@ -79,6 +59,12 @@ function restoreEnv() {
     delete process.env.ANALYSIS_JOB_TIMEOUT_MS;
   } else {
     process.env.ANALYSIS_JOB_TIMEOUT_MS = originalAnalysisJobTimeout;
+  }
+
+  if (originalAiAnalysisTimeout === undefined) {
+    delete process.env.AI_ANALYSIS_TIMEOUT_MS;
+  } else {
+    process.env.AI_ANALYSIS_TIMEOUT_MS = originalAiAnalysisTimeout;
   }
 
   if (originalReviewRequestTimeout === undefined) {
@@ -112,6 +98,18 @@ function createAnalyzeJobRequest(url) {
     body: JSON.stringify({
       url,
       language: "zh-CN"
+    })
+  });
+}
+
+function createRunAnalyzeJobRequest(jobId) {
+  return new Request("http://127.0.0.1:3000/api/analyze/jobs/run", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      jobId
     })
   });
 }
@@ -285,7 +283,7 @@ test("analyze route returns App Store web fallback reviews and provider metadata
           choices: [
             {
               message: {
-                content: JSON.stringify(sampleAnalysis)
+                content: JSON.stringify(sampleDraft)
               }
             }
           ]
@@ -340,7 +338,14 @@ test("analyze route returns App Store web fallback reviews and provider metadata
   assert.equal(payload.reviews[0].id, "web-review-1");
   assert.equal(payload.reviews[0].snippetId, "app-store:web-review-1:1");
   assert.equal(payload.reviews[1].text, "建议知识库加入固定问题的工作流功能。");
-  assert.deepEqual(payload.analysis, sampleAnalysis);
+  assert.equal(payload.analysis.insightPreview.coreSummary, sampleDraft.coreSummary);
+  assert.equal(payload.analysis.coreMetrics.totalReviews, 2);
+  assert.equal(payload.analysis.coreMetrics.signalCluster, sampleDraft.signalCluster);
+  assert.equal(payload.analysis.emotionDistribution.positive, 50);
+  assert.deepEqual(
+    payload.analysis.deepInsights.highFreqPainPoints,
+    sampleDraft.highFreqPainPoints
+  );
 });
 
 test("review preselection keeps high-value reviews within the configured limit", () => {
@@ -375,19 +380,20 @@ test("analyze jobs share state across separately loaded route modules", async ()
     `../lib/analyze-jobs.ts?store-b=${importSuffix}`
   );
 
-  const created = firstModule.createAnalyzeJob({
+  const created = await firstModule.createAnalyzeJob({
     url: "https://example.com",
     language: "zh-CN",
     maxReviews: 1,
     selectedReviewLimit: 1,
     reviewTextMaxChars: 10
   });
-  const found = secondModule.getAnalyzeJob(created.jobId);
+  assert.equal(created.ok, true);
+  const found = await secondModule.getAnalyzeJob(created.job.jobId);
 
-  assert.equal(found?.jobId, created.jobId);
+  assert.equal(found?.jobId, created.job.jobId);
 
   for (let attempt = 0; attempt < 20; attempt += 1) {
-    const current = secondModule.getAnalyzeJob(created.jobId);
+    const current = await secondModule.getAnalyzeJob(created.job.jobId);
 
     if (current?.status === "failed" || current?.status === "completed") {
       return;
@@ -397,7 +403,7 @@ test("analyze jobs share state across separately loaded route modules", async ()
   }
 });
 
-test("analyze job completes with 50 fetched reviews, 24 AI reviews, and mapped evidence", async () => {
+test("analyze job completes with 50 fetched reviews, 12 AI reviews, and local evidence", async () => {
   process.env.SILICONFLOW_API_KEY = "siliconflow-test-key";
   process.env.ANALYZE_RATE_LIMIT_MAX_REQUESTS = "100";
   console.info = () => undefined;
@@ -433,31 +439,12 @@ test("analyze job completes with 50 fetched reviews, 24 AI reviews, and mapped e
       completions: {
         create: async (request) => {
           capturedAnalysisText = request.messages[1].content;
-          const selectedReviewMatch = capturedAnalysisText.match(
-            /^#(\d+)\noriginalIndex: 50/m
-          );
-          const selectedReviewIndex = Number.parseInt(
-            selectedReviewMatch?.[1] ?? "1",
-            10
-          );
 
           return {
             choices: [
               {
                 message: {
-                  content: JSON.stringify({
-                    ...sampleAnalysis,
-                    deepInsights: {
-                    ...sampleAnalysis.deepInsights,
-                    painPointEvidenceReviewIndexes: [[selectedReviewIndex]],
-                    featureRequestEvidenceReviewIndexes: [[selectedReviewIndex]]
-                  },
-                  typicalVoiceEvidenceReviewIndexes: {
-                      positive: [selectedReviewIndex],
-                      neutral: [],
-                      negative: [selectedReviewIndex]
-                    }
-                  })
+                  content: JSON.stringify(sampleDraft)
                 }
               }
             ]
@@ -503,11 +490,84 @@ test("analyze job completes with 50 fetched reviews, 24 AI reviews, and mapped e
   assert.equal(payload.status, "completed");
   assert.equal(payload.result.reviewCount, 50);
   assert.equal(payload.result.reviews.length, 50);
-  assert.equal((capturedAnalysisText.match(/^#/gm) ?? []).length, 24);
+  assert.equal((capturedAnalysisText.match(/^#/gm) ?? []).length, 12);
   assert(capturedAnalysisText.includes("希望增加导出工作流"));
   assert.deepEqual(payload.result.evidence.painPoints[0], [
     "app-store:rss-review-50:50"
   ]);
+  assert.deepEqual(payload.result.evidence.featureRequests[0], [
+    "app-store:rss-review-50:50"
+  ]);
+});
+
+test("worker route runs a queued analyze job", async () => {
+  process.env.SILICONFLOW_API_KEY = "siliconflow-test-key";
+  process.env.ANALYZE_RATE_LIMIT_MAX_REQUESTS = "100";
+  console.info = () => undefined;
+  __setAnalyzeJobQueuePublisherForTest(async () => undefined);
+
+  const appUrl = "https://apps.apple.com/cn/app/example/id123456789";
+
+  __setAnalyzeFeedbackClientFactoryForTest(() => ({
+    chat: {
+      completions: {
+        create: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify(sampleDraft)
+              }
+            }
+          ]
+        })
+      }
+    }
+  }));
+
+  globalThis.fetch = async () => ({
+    ok: true,
+    json: async () => ({
+      feed: {
+        entry: [
+          {
+            id: {
+              label: "rss-review-1"
+            },
+            title: {
+              label: "工作流建议"
+            },
+            content: {
+              label: "希望增加导出工作流，并优化同步失败的问题。"
+            },
+            "im:rating": {
+              label: "2"
+            },
+            updated: {
+              label: "2026-05-01T00:00:00.000Z"
+            }
+          }
+        ]
+      }
+    })
+  });
+
+  const createResponse = await POST_JOB(createAnalyzeJobRequest(appUrl));
+  const createPayload = await createResponse.json();
+
+  assert.equal(createPayload.status, "queued");
+
+  const runResponse = await POST_RUN_JOB(
+    createRunAnalyzeJobRequest(createPayload.jobId)
+  );
+  const runPayload = await runResponse.json();
+  const completed = await getAnalyzeJob(createPayload.jobId);
+
+  assert.equal(runResponse.status, 200);
+  assert.deepEqual(runPayload, {
+    ok: true
+  });
+  assert.equal(completed.payload.status, "completed");
+  assert.equal(completed.payload.result.reviewCount, 1);
 });
 
 test("analyze job returns cached completed result without refetching", async () => {
@@ -525,7 +585,7 @@ test("analyze job returns cached completed result without refetching", async () 
           choices: [
             {
               message: {
-                content: JSON.stringify(sampleAnalysis)
+                content: JSON.stringify(sampleDraft)
               }
             }
           ]
@@ -589,6 +649,60 @@ test("analyze job returns cached completed result without refetching", async () 
   assert.equal(secondCreatePayload.status, "completed");
   assert.equal(secondCreatePayload.result.reviewCount, 1);
   assert.equal(fetchCalls, fetchCallsAfterFirstJob);
+});
+
+test("analyze job completes with deterministic fallback when AI times out", async () => {
+  process.env.SILICONFLOW_API_KEY = "siliconflow-test-key";
+  process.env.ANALYZE_RATE_LIMIT_MAX_REQUESTS = "100";
+  process.env.AI_ANALYSIS_TIMEOUT_MS = "10";
+  console.info = () => undefined;
+
+  const appUrl = "https://apps.apple.com/cn/app/example/id123456789";
+
+  __setAnalyzeFeedbackClientFactoryForTest(() => ({
+    chat: {
+      completions: {
+        create: async () => new Promise(() => undefined)
+      }
+    }
+  }));
+
+  globalThis.fetch = async () => ({
+    ok: true,
+    json: async () => ({
+      feed: {
+        entry: [
+          {
+            id: {
+              label: "rss-review-1"
+            },
+            title: {
+              label: "同步失败"
+            },
+            content: {
+              label: "同步经常失败，希望优化离线模式和登录稳定性。"
+            },
+            "im:rating": {
+              label: "1"
+            },
+            updated: {
+              label: "2026-05-01T00:00:00.000Z"
+            }
+          }
+        ]
+      }
+    })
+  });
+
+  const createResponse = await POST_JOB(createAnalyzeJobRequest(appUrl));
+  const createPayload = await createResponse.json();
+  const { payload } = await waitForAnalyzeJob(createPayload.jobId);
+
+  assert.equal(payload.status, "completed");
+  assert.equal(payload.result.reviewCount, 1);
+  assert.equal(payload.result.analysis.coreMetrics.totalReviews, 1);
+  assert.equal(payload.result.analysis.emotionDistribution.negative, 100);
+  assert.match(payload.result.analysis.insightPreview.coreSummary, /用户仍/);
 });
 
 test("analyze job exposes failed scrape errors with a stable shape", async () => {

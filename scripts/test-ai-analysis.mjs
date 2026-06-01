@@ -3,6 +3,7 @@ import { afterEach, test } from "node:test";
 
 const originalApiKey = process.env.SILICONFLOW_API_KEY;
 const originalAiAnalysisTimeout = process.env.AI_ANALYSIS_TIMEOUT_MS;
+const originalAiAnalysisMaxTokens = process.env.AI_ANALYSIS_MAX_TOKENS;
 const originalConsoleError = console.error;
 
 const {
@@ -12,39 +13,12 @@ const {
   analyzeFeedback
 } = await import("../lib/ai-analysis.ts");
 
-const sampleAnalysis = {
-  insightPreview: {
-    comprehensiveScore: 84,
-    coreSummary: "移动端查看任务方便，但跨端衔接存在阻力"
-  },
-  coreMetrics: {
-    totalReviews: 438,
-    highValueSignals: 164,
-    signalCluster: "移动体验和协作阻力",
-    positiveRatio: 61,
-    positiveFocus: "围绕任务查看与通知体验"
-  },
-  emotionDistribution: {
-    positive: 61,
-    neutral: 27,
-    negative: 12
-  },
-  deepInsights: {
-    highFreqPainPoints: ["跨端上下文断裂", "移动端 diff 不完整", "通知不及时"],
-    featureRequests: ["同步任务状态", "展示完整 diff", "增强通知稳定性"],
-    painPointEvidenceReviewIndexes: [[2], [3], [1]],
-    featureRequestEvidenceReviewIndexes: [[2], [3], [1]]
-  },
-  typicalVoices: {
-    positive: "在外面也能看任务进度很方便。",
-    neutral: "从桌面切到 iPad 后需要重新确认上下文。",
-    negative: "手机上看不到完整 diff。"
-  },
-  typicalVoiceEvidenceReviewIndexes: {
-    positive: [1],
-    neutral: [2],
-    negative: [3]
-  }
+const sampleDraft = {
+  coreSummary: "移动端查看任务方便，但跨端衔接存在阻力",
+  signalCluster: "移动体验阻力",
+  positiveFocus: "任务查看与通知",
+  highFreqPainPoints: ["跨端上下文断裂", "移动端 diff 不完整", "通知不及时"],
+  featureRequests: ["同步任务状态", "展示完整 diff", "增强通知稳定性"]
 };
 
 afterEach(() => {
@@ -61,6 +35,12 @@ afterEach(() => {
     delete process.env.AI_ANALYSIS_TIMEOUT_MS;
   } else {
     process.env.AI_ANALYSIS_TIMEOUT_MS = originalAiAnalysisTimeout;
+  }
+
+  if (originalAiAnalysisMaxTokens === undefined) {
+    delete process.env.AI_ANALYSIS_MAX_TOKENS;
+  } else {
+    process.env.AI_ANALYSIS_MAX_TOKENS = originalAiAnalysisMaxTokens;
   }
 });
 
@@ -83,7 +63,7 @@ test("analyzeFeedback calls SiliconFlow with default model and parses JSON", asy
               choices: [
                 {
                   message: {
-                    content: JSON.stringify(sampleAnalysis)
+                    content: JSON.stringify(sampleDraft)
                   }
                 }
               ]
@@ -96,20 +76,23 @@ test("analyzeFeedback calls SiliconFlow with default model and parses JSON", asy
 
   const result = await analyzeFeedback("用户评论原文");
 
-  assert.equal(result.coreMetrics.totalReviews, 438);
-  assert.deepEqual(result.deepInsights.painPointEvidenceReviewIndexes[0], [2]);
-  assert.deepEqual(result.typicalVoiceEvidenceReviewIndexes.negative, [3]);
+  assert.equal(result.coreSummary, sampleDraft.coreSummary);
+  assert.deepEqual(result.highFreqPainPoints, sampleDraft.highFreqPainPoints);
   assert.deepEqual(capturedOptions, {
     baseURL: SILICONFLOW_BASE_URL,
     apiKey: "siliconflow-test-key",
-    timeout: 30000
+    timeout: 45000
   });
   assert.equal(capturedRequest.model, DEFAULT_ANALYSIS_MODEL);
+  assert.equal(capturedRequest.temperature, 0.2);
+  assert.equal(capturedRequest.max_tokens, 700);
   assert.deepEqual(capturedRequest.response_format, {
     type: "json_object"
   });
   assert.equal(capturedRequest.messages[0].role, "system");
-  assert.match(capturedRequest.messages[0].content, /资深的用户体验/);
+  assert.match(capturedRequest.messages[0].content, /资深 UX/);
+  assert.doesNotMatch(capturedRequest.messages[0].content, /evidenceReviewIndexes/);
+  assert.doesNotMatch(capturedRequest.messages[0].content, /totalReviews/);
   assert.equal(capturedRequest.messages[1].role, "user");
   assert.equal(capturedRequest.messages[1].content, "用户评论原文");
 });
@@ -129,10 +112,10 @@ test("analyzeFeedback uses the provided model type", async () => {
             choices: [
               {
                 message: {
-                  content: JSON.stringify(sampleAnalysis)
+                    content: JSON.stringify(sampleDraft)
+                  }
                 }
-              }
-            ]
+              ]
           };
         }
       }

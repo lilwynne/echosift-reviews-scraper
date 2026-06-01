@@ -26,7 +26,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
     return jsonError("INVALID_JOB_ID", "分析任务 ID 无效。", 400);
   }
 
-  const job = getAnalyzeJob(jobId);
+  const job = await getAnalyzeJob(jobId);
 
   if (!job) {
     return jsonError("ANALYZE_JOB_NOT_FOUND", "分析任务不存在或已过期。", 404);

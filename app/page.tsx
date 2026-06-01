@@ -35,7 +35,7 @@ const errorCopy: Record<
 };
 
 const POLL_INTERVAL_MS = 1500;
-const MAX_POLL_ATTEMPTS = 35;
+const MAX_POLL_ATTEMPTS = 80;
 
 function getLoadingStepForJobStatus(status: AnalyzeJobStatus) {
   if (status === "analyzing") {

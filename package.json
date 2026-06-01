@@ -14,6 +14,8 @@
     "test:analyze-route": "node --loader ./scripts/test-esm-loader.mjs --experimental-strip-types --test scripts/test-analyze-route.mjs"
   },
   "dependencies": {
+    "@upstash/qstash": "^2.11.0",
+    "@upstash/redis": "^1.38.0",
     "autoprefixer": "^10.4.20",
     "framer-motion": "^12.40.0",
     "google-play-scraper": "^10.1.2",

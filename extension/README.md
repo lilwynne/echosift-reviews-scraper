@@ -45,7 +45,7 @@ extension/build/chrome-mv3-prod
 3. Select Load unpacked.
 4. Choose the generated build directory.
 5. Open a supported product page and verify the floating `✨ 一键分析评论` button.
-6. Click the button and inspect the extension service worker to confirm the request to `/api/analyze`.
+6. Click the button and inspect the extension service worker to confirm requests to `/api/analyze/jobs` and `/api/analyze/jobs/{jobId}`.
 7. Click again while the first analysis is still running and confirm the service worker shares the in-flight request instead of starting a duplicate backend call.
 8. Click again after a successful response and confirm the same page returns from the extension cache.
 
@@ -55,12 +55,12 @@ extension/build/chrome-mv3-prod
 - The background service worker normalizes the URL plus language before analysis, so duplicate clicks on the same page share one in-flight request.
 - Successful analysis responses are cached in `chrome.storage.session` with an in-memory fallback.
 - Failed analysis responses are not cached.
-- Requests time out after 90 seconds by default and show a clear timeout message in the modal.
+- Requests time out after 120 seconds by default and show a clear timeout message in the modal.
 
 Optional build-time overrides:
 
 ```bash
-PLASMO_PUBLIC_ANALYSIS_TIMEOUT_MS=90000 \
+PLASMO_PUBLIC_ANALYSIS_TIMEOUT_MS=120000 \
 PLASMO_PUBLIC_ANALYSIS_CACHE_TTL_MS=1800000 \
 npm run build
 ```

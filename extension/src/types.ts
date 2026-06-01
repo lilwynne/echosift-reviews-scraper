@@ -41,6 +41,27 @@ export type AnalyzeApiResponse = {
   }
 }
 
+export type AnalyzeJobStatus =
+  | "queued"
+  | "scraping"
+  | "analyzing"
+  | "completed"
+  | "failed"
+
+export type AnalyzeJobResponse = {
+  jobId: string
+  status: AnalyzeJobStatus
+  createdAt: string
+  updatedAt: string
+  elapsedMs: number
+  result?: AnalyzeApiResponse
+  error?: {
+    code: string
+    message: string
+    status: number
+  }
+}
+
 export type AnalyzeMessageResponse =
   | {
       ok: true

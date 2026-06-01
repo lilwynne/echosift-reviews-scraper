@@ -126,6 +126,7 @@ type GooglePlayModuleWithRuntimeOptions = typeof gplayModule & {
 
 const DEFAULT_MAX_REVIEWS = 100;
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+const DEFAULT_GOOGLE_PLAY_WEB_FALLBACK_TIMEOUT_MS = 8_000;
 const DEFAULT_GOOGLE_PLAY_SCRAPER_THROTTLE = 10;
 const APP_STORE_PAGE_SIZE = 50;
 const APP_STORE_MAX_PAGES = 10;
@@ -268,6 +269,13 @@ function getGooglePlayScraperThrottle() {
   return getPositiveIntegerEnv(
     "GOOGLE_PLAY_SCRAPER_THROTTLE",
     DEFAULT_GOOGLE_PLAY_SCRAPER_THROTTLE
+  );
+}
+
+function getGooglePlayWebFallbackTimeoutMs() {
+  return getPositiveIntegerEnv(
+    "GOOGLE_PLAY_WEB_FALLBACK_TIMEOUT_MS",
+    DEFAULT_GOOGLE_PLAY_WEB_FALLBACK_TIMEOUT_MS
   );
 }
 
@@ -690,6 +698,18 @@ function getRssLabel(value: unknown) {
     : undefined;
 }
 
+function getRssNumber(value: unknown) {
+  const label = getRssLabel(value);
+
+  if (!label) {
+    return undefined;
+  }
+
+  const parsed = Number.parseFloat(label);
+
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 function getAppStoreReview(item: JsonRecord): NormalizedReview | null {
   const text = getRssLabel(item.content) ?? getRssLabel(item.summary);
 
@@ -707,9 +727,9 @@ function getAppStoreReview(item: JsonRecord): NormalizedReview | null {
     title: getRssLabel(item.title),
     text,
     author,
-    rating: numberFrom(item, ["im:rating"]),
+    rating: getRssNumber(item["im:rating"]),
     date: getRssLabel(item.updated),
-    votes: numberFrom(item, ["im:voteSum", "im:voteCount"])
+    votes: getRssNumber(item["im:voteSum"]) ?? getRssNumber(item["im:voteCount"])
   };
 }
 
@@ -1087,13 +1107,19 @@ async function fetchGooglePlayWebReviews(
   endpoint.searchParams.set("hl", sourceConfig.lang);
   endpoint.searchParams.set("gl", sourceConfig.country);
 
-  const response = await got(endpoint.toString(), {
-    agent: getAgentOptions(),
-    timeout: {
-      request: getRequestTimeoutMs()
-    },
-    headers: GOOGLE_PLAY_HEADERS
-  });
+	  const response = await got(endpoint.toString(), {
+	    agent: getAgentOptions(),
+	    retry: {
+	      limit: 0
+	    },
+	    timeout: {
+	      request: Math.min(
+	        getRequestTimeoutMs(),
+	        getGooglePlayWebFallbackTimeoutMs()
+	      )
+	    },
+	    headers: GOOGLE_PLAY_HEADERS
+	  });
   const { reviews, rawItems } = getGooglePlayWebReviews(
     response.body,
     url,
