@@ -446,7 +446,9 @@ test("app store slug urls resolve the app id before fetching rss reviews", async
 
   try {
     const { fetchReviews } = await loadModule();
-    const result = await fetchReviews("https://apps.apple.com/cn/app/soul/");
+    const result = await fetchReviews("https://apps.apple.com/cn/app/soul/", {
+      maxReviews: 1
+    });
 
     assert.equal(result.ok, true);
     assert.equal(result.provider, "apple-rss");
@@ -530,6 +532,93 @@ test("app store rss reviews skip the web page fallback", async () => {
   }
 });
 
+test("app store rss fills a small primary-country sample from fallback countries", async () => {
+  const requestedUrls = [];
+  const reviewsByUrl = {
+    "https://itunes.apple.com/cn/rss/customerreviews/page=1/id=6737188438/sortby=mostrecent/json":
+      [
+        {
+          id: {
+            label: "cn-review-1"
+          },
+          title: {
+            label: "CN review"
+          },
+          content: {
+            label: "CN review text."
+          },
+          "im:rating": {
+            label: "5"
+          },
+          updated: {
+            label: "2026-05-20T00:00:00Z"
+          }
+        }
+      ],
+    "https://itunes.apple.com/us/rss/customerreviews/page=1/id=6737188438/sortby=mostrecent/json":
+      [
+        {
+          id: {
+            label: "us-review-1"
+          },
+          title: {
+            label: "US review"
+          },
+          content: {
+            label: "US review text."
+          },
+          "im:rating": {
+            label: "1"
+          },
+          updated: {
+            label: "2026-05-21T00:00:00Z"
+          }
+        }
+      ]
+  };
+
+  globalThis.fetch = async (input) => {
+    const url = input instanceof URL ? input.toString() : String(input);
+    requestedUrls.push(url);
+
+    assert(url in reviewsByUrl);
+
+    return {
+      ok: true,
+      json: async () => ({
+        feed: {
+          entry: reviewsByUrl[url]
+        }
+      })
+    };
+  };
+
+  try {
+    const { fetchReviews } = await loadModule();
+    const result = await fetchReviews(
+      "https://apps.apple.com/cn/app/ima-%E8%85%BE%E8%AE%AF-ai-%E5%B7%A5%E4%BD%9C%E5%8F%B0/id6737188438",
+      {
+        maxReviews: 2
+      }
+    );
+
+    assert.equal(result.ok, true);
+    assert.equal(result.provider, "apple-rss");
+    assert.equal(result.count, 2);
+    assert.deepEqual(
+      result.reviews.map((review) => review.id),
+      ["cn-review-1", "us-review-1"]
+    );
+    assert.deepEqual(requestedUrls, [
+      "https://itunes.apple.com/cn/rss/customerreviews/page=1/id=6737188438/sortby=mostrecent/json",
+      "https://itunes.apple.com/us/rss/customerreviews/page=1/id=6737188438/sortby=mostrecent/json"
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
 test("app store rss empty feed falls back to web page reviews", async () => {
   const requestedUrls = [];
   const requestedHeaders = [];
@@ -551,7 +640,7 @@ test("app store rss empty feed falls back to web page reviews", async () => {
     requestedUrls.push(url);
     requestedHeaders.push(init?.headers);
 
-    if (url.startsWith("https://itunes.apple.com/cn/rss/customerreviews")) {
+    if (url.startsWith("https://itunes.apple.com/")) {
       return {
         ok: true,
         json: async () => ({
@@ -593,11 +682,17 @@ test("app store rss empty feed falls back to web page reviews", async () => {
     assert.equal(result.rawItems.length, 1);
     assert.deepEqual(requestedUrls, [
       "https://itunes.apple.com/cn/rss/customerreviews/page=1/id=6737188438/sortby=mostrecent/json",
+      "https://itunes.apple.com/us/rss/customerreviews/page=1/id=6737188438/sortby=mostrecent/json",
+      "https://itunes.apple.com/jp/rss/customerreviews/page=1/id=6737188438/sortby=mostrecent/json",
+      "https://itunes.apple.com/gb/rss/customerreviews/page=1/id=6737188438/sortby=mostrecent/json",
+      "https://itunes.apple.com/ca/rss/customerreviews/page=1/id=6737188438/sortby=mostrecent/json",
+      "https://itunes.apple.com/au/rss/customerreviews/page=1/id=6737188438/sortby=mostrecent/json",
       appUrl
     ]);
     assertBrowserJsonHeaders(requestedHeaders[0]);
-    assert.match(requestedHeaders[1].Accept, /text\/html/);
-    assert.match(requestedHeaders[1]["User-Agent"], /Mozilla\/5\.0/);
+    assertBrowserJsonHeaders(requestedHeaders[5]);
+    assert.match(requestedHeaders[6].Accept, /text\/html/);
+    assert.match(requestedHeaders[6]["User-Agent"], /Mozilla\/5\.0/);
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnv();
@@ -611,7 +706,7 @@ test("app store web fallback returns empty reviews when serialized data is missi
   globalThis.fetch = async (input) => {
     const url = input instanceof URL ? input.toString() : String(input);
 
-    if (url.startsWith("https://itunes.apple.com/cn/rss/customerreviews")) {
+    if (url.startsWith("https://itunes.apple.com/")) {
       return {
         ok: true,
         json: async () => ({

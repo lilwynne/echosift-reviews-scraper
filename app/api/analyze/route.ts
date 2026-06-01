@@ -21,7 +21,7 @@ type AnalyzeRequestBody = {
 const validLanguages = new Set<Language>(
   languages.map((language) => language.code)
 );
-const DEFAULT_ANALYSIS_MAX_REVIEWS = 50;
+const DEFAULT_ANALYSIS_MAX_REVIEWS = 150;
 const DEFAULT_ANALYSIS_SELECTED_REVIEW_LIMIT = 12;
 const DEFAULT_ANALYSIS_REVIEW_TEXT_MAX_CHARS = 280;
 

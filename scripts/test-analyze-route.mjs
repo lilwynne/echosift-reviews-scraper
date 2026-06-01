@@ -8,6 +8,7 @@ const originalRateLimit = process.env.ANALYZE_RATE_LIMIT_MAX_REQUESTS;
 const originalAnalysisJobTimeout = process.env.ANALYSIS_JOB_TIMEOUT_MS;
 const originalAiAnalysisTimeout = process.env.AI_ANALYSIS_TIMEOUT_MS;
 const originalReviewRequestTimeout = process.env.REVIEWS_REQUEST_TIMEOUT_MS;
+const originalWebAnalysisMaxReviews = process.env.WEB_ANALYSIS_MAX_REVIEWS;
 const originalFetch = globalThis.fetch;
 const originalConsoleInfo = console.info;
 
@@ -71,6 +72,12 @@ function restoreEnv() {
     delete process.env.REVIEWS_REQUEST_TIMEOUT_MS;
   } else {
     process.env.REVIEWS_REQUEST_TIMEOUT_MS = originalReviewRequestTimeout;
+  }
+
+  if (originalWebAnalysisMaxReviews === undefined) {
+    delete process.env.WEB_ANALYSIS_MAX_REVIEWS;
+  } else {
+    process.env.WEB_ANALYSIS_MAX_REVIEWS = originalWebAnalysisMaxReviews;
   }
 }
 
@@ -169,7 +176,7 @@ test("analyze route returns empty analysis without an AI key when no reviews are
     const url = input instanceof URL ? input.toString() : String(input);
     requestedUrls.push(url);
 
-    if (url.startsWith("https://itunes.apple.com/cn/rss/customerreviews")) {
+    if (url.startsWith("https://itunes.apple.com/")) {
       return {
         ok: true,
         json: async () => ({
@@ -206,6 +213,11 @@ test("analyze route returns empty analysis without an AI key when no reviews are
   assert.deepEqual(payload.analysis, createEmptyAnalysisResult());
   assert.deepEqual(requestedUrls, [
     "https://itunes.apple.com/cn/rss/customerreviews/page=1/id=123456789/sortby=mostrecent/json",
+    "https://itunes.apple.com/us/rss/customerreviews/page=1/id=123456789/sortby=mostrecent/json",
+    "https://itunes.apple.com/jp/rss/customerreviews/page=1/id=123456789/sortby=mostrecent/json",
+    "https://itunes.apple.com/gb/rss/customerreviews/page=1/id=123456789/sortby=mostrecent/json",
+    "https://itunes.apple.com/ca/rss/customerreviews/page=1/id=123456789/sortby=mostrecent/json",
+    "https://itunes.apple.com/au/rss/customerreviews/page=1/id=123456789/sortby=mostrecent/json",
     appUrl
   ]);
 });
@@ -222,7 +234,7 @@ test("analyze route does not cache empty App Store scrape results", async () => 
     const url = input instanceof URL ? input.toString() : String(input);
     fetchCalls += 1;
 
-    if (url.startsWith("https://itunes.apple.com/cn/rss/customerreviews")) {
+    if (url.startsWith("https://itunes.apple.com/")) {
       return {
         ok: true,
         json: async () => ({
@@ -246,7 +258,7 @@ test("analyze route does not cache empty App Store scrape results", async () => 
   assert.equal(secondResponse.status, 200);
   assert.equal((await firstResponse.json()).reviewCount, 0);
   assert.equal((await secondResponse.json()).reviewCount, 0);
-  assert.equal(fetchCalls, 4);
+  assert.equal(fetchCalls, 14);
 });
 
 test("analyze route returns App Store web fallback reviews and provider metadata", async () => {
@@ -295,7 +307,7 @@ test("analyze route returns App Store web fallback reviews and provider metadata
   globalThis.fetch = async (input) => {
     const url = input instanceof URL ? input.toString() : String(input);
 
-    if (url.startsWith("https://itunes.apple.com/cn/rss/customerreviews")) {
+    if (url.startsWith("https://itunes.apple.com/")) {
       return {
         ok: true,
         json: async () => ({
@@ -403,9 +415,10 @@ test("analyze jobs share state across separately loaded route modules", async ()
   }
 });
 
-test("analyze job completes with 50 fetched reviews, 12 AI reviews, and local evidence", async () => {
+test("analyze job completes with the configured fetched reviews, 12 AI reviews, and local evidence", async () => {
   process.env.SILICONFLOW_API_KEY = "siliconflow-test-key";
   process.env.ANALYZE_RATE_LIMIT_MAX_REQUESTS = "100";
+  process.env.WEB_ANALYSIS_MAX_REVIEWS = "50";
   console.info = () => undefined;
 
   const appUrl = "https://apps.apple.com/cn/app/example/id123456789";

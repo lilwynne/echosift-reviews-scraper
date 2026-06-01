@@ -130,6 +130,7 @@ const DEFAULT_GOOGLE_PLAY_WEB_FALLBACK_TIMEOUT_MS = 8_000;
 const DEFAULT_GOOGLE_PLAY_SCRAPER_THROTTLE = 10;
 const APP_STORE_PAGE_SIZE = 50;
 const APP_STORE_MAX_PAGES = 10;
+const APP_STORE_FALLBACK_COUNTRIES = ["us", "cn", "jp", "gb", "ca", "au"];
 const PRODUCT_HUNT_GRAPHQL_ENDPOINT =
   "https://api.producthunt.com/v2/api/graphql";
 const PRODUCT_HUNT_COMMENTS_PAGE_SIZE = 50;
@@ -836,6 +837,38 @@ function getAppStoreWebReviewDedupKey(review: NormalizedReview) {
   return `fallback:${review.title ?? ""}:${review.text}:${review.date ?? ""}`;
 }
 
+function getReviewDedupKey(review: NormalizedReview) {
+  if (review.id) {
+    return `${review.source}:id:${review.id}`;
+  }
+
+  return `${review.source}:fallback:${review.title ?? ""}:${review.text}:${
+    review.date ?? ""
+  }`;
+}
+
+function pushUniqueReviews(
+  target: NormalizedReview[],
+  candidates: NormalizedReview[],
+  seenKeys: Set<string>,
+  maxReviews: number
+) {
+  for (const review of candidates) {
+    if (target.length >= maxReviews) {
+      break;
+    }
+
+    const key = getReviewDedupKey(review);
+
+    if (seenKeys.has(key)) {
+      continue;
+    }
+
+    seenKeys.add(key);
+    target.push(review);
+  }
+}
+
 function collectAppStoreWebReviewsFromShelf(
   shelf: unknown,
   sourceUrl: string,
@@ -1163,6 +1196,32 @@ async function fetchAppStoreWebReviews(
   }
 }
 
+async function fetchAppStoreRssPage(
+  country: string,
+  appId: string,
+  page: number
+) {
+  const endpoint = new URL(
+    `https://itunes.apple.com/${country}/rss/customerreviews/page=${page}/id=${appId}/sortby=mostrecent/json`
+  );
+  const response = await fetchWithTimeout(endpoint, {
+    headers: APP_STORE_HEADERS
+  });
+
+  if (!response.ok) {
+    return undefined;
+  }
+
+  return response.json();
+}
+
+function getAppStoreRssCountries(primaryCountry: string) {
+  return [
+    primaryCountry,
+    ...APP_STORE_FALLBACK_COUNTRIES.filter((country) => country !== primaryCountry)
+  ];
+}
+
 async function fetchProductHuntGraphqlPage(
   sourceConfig: ProductHuntConfig,
   first: number,
@@ -1298,6 +1357,7 @@ async function fetchAppStoreReviews(
 ): Promise<FetchReviewsResult> {
   const rawItems: unknown[] = [];
   const reviews: NormalizedReview[] = [];
+  const seenReviewKeys = new Set<string>();
   const pageLimit = Math.min(
     APP_STORE_MAX_PAGES,
     Math.ceil(maxReviews / APP_STORE_PAGE_SIZE)
@@ -1312,28 +1372,36 @@ async function fetchAppStoreReviews(
       );
     }
 
-    for (let page = 1; page <= pageLimit && reviews.length < maxReviews; page += 1) {
-      const endpoint = new URL(
-        `https://itunes.apple.com/${sourceConfig.country}/rss/customerreviews/page=${page}/id=${appId}/sortby=mostrecent/json`
-      );
-      const response = await fetchWithTimeout(endpoint, {
-        headers: APP_STORE_HEADERS
-      });
+    for (const country of getAppStoreRssCountries(sourceConfig.country)) {
+      for (
+        let page = 1;
+        page <= pageLimit && reviews.length < maxReviews;
+        page += 1
+      ) {
+        const payload = await fetchAppStoreRssPage(country, appId, page);
 
-      if (!response.ok) {
-        return reviewFetchFailedFailure("Apple RSS 评论抓取失败，请稍后重试。");
+        if (!payload) {
+          if (country === sourceConfig.country && page === 1) {
+            return reviewFetchFailedFailure("Apple RSS 评论抓取失败，请稍后重试。");
+          }
+
+          break;
+        }
+
+        const pageReviews = normalizeAppStoreReviews(payload);
+
+        rawItems.push(payload);
+
+        if (pageReviews.length === 0) {
+          break;
+        }
+
+        pushUniqueReviews(reviews, pageReviews, seenReviewKeys, maxReviews);
       }
 
-      const payload = await response.json();
-      const pageReviews = normalizeAppStoreReviews(payload);
-
-      rawItems.push(payload);
-
-      if (pageReviews.length === 0) {
+      if (reviews.length >= maxReviews) {
         break;
       }
-
-      reviews.push(...pageReviews);
     }
 
     if (reviews.length === 0) {

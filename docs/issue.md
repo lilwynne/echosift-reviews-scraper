@@ -23,8 +23,8 @@ EchoSift needs to move from a purely mocked dashboard toward a real review-inges
 - Return normalized `NormalizedReview[]` across sources.
 - Use `provider` to identify the active backend provider for each source.
 - Use `REVIEWS_MAX_REVIEWS` and `REVIEWS_REQUEST_TIMEOUT_MS` for ingestion limits/timeouts.
-- Use `ANALYSIS_MAX_REVIEWS=50` by default for `/api/analyze`; `/api/reviews` keeps the broader ingestion default.
-- Use async analysis jobs for the homepage and Chrome extension. Web jobs default to `WEB_ANALYSIS_MAX_REVIEWS=50`, select `WEB_ANALYSIS_SELECTED_REVIEW_LIMIT=12` high-value reviews for AI, and trim selected review text to `WEB_ANALYSIS_REVIEW_TEXT_MAX_CHARS=280`.
+- Use `ANALYSIS_MAX_REVIEWS=150` by default for `/api/analyze`; `/api/reviews` keeps the broader ingestion default.
+- Use async analysis jobs for the homepage and Chrome extension. Web jobs default to `WEB_ANALYSIS_MAX_REVIEWS=150`, select `WEB_ANALYSIS_SELECTED_REVIEW_LIMIT=12` high-value reviews for AI, and trim selected review text to `WEB_ANALYSIS_REVIEW_TEXT_MAX_CHARS=280`.
 - Keep `/api/analyze` response compatible with the existing mock dashboard while adding `scrapeSource`, `reviewCount`, and `reviews`.
 - Keep `/api/analyze` as a synchronous compatibility endpoint, but move first-party clients to async jobs.
 - Keep extension type checking separate from the Next.js app because Plasmo uses its own `~src/*` alias and `extension/tsconfig.json`.
@@ -97,7 +97,7 @@ Smoke-test notes:
 
 - Symptom: the extension could feel slow because every click sent a fresh `/api/analyze` request, repeated clicks were not shared, and the content script continuously watched page-wide DOM mutations plus a 500ms URL poll.
 - Fix: moved duplicate request handling into the background service worker, cached successful results in `chrome.storage.session` with an in-memory fallback, added request timeout handling, and replaced page-wide URL polling with event-driven SPA URL detection plus a click-debounced fallback.
-- Backend alignment: `/api/analyze` now defaults to `ANALYSIS_MAX_REVIEWS=50`, matching the documented fast Product Hunt analysis path.
+- Backend alignment: `/api/analyze` now keeps AI input small while allowing a larger fetched evidence pool through `ANALYSIS_MAX_REVIEWS`.
 
 ### 2026-05-29: App Store RSS returned empty while the web page showed reviews
 
@@ -121,7 +121,7 @@ Smoke-test notes:
 
 - Symptom: Google Play analysis could stay on the loading state for more than a minute while the page kept polling the same job.
 - Root cause: the async web job path lowered prompt size, but raised webpage fetching to 100 reviews, did not put a hard timeout around the `google-play-scraper` promise, the AI request, or the job itself, and kept jobs in a route-local module `Map` that could be invisible to the `[jobId]` polling route in Next dev bundles.
-- Fix: web jobs now use a process-level shared job store, default to 50 fetched reviews, 24 selected AI reviews, 500 chars per selected review, a 45-second job timeout, and a 30-second AI timeout. Google Play scraping now also has a promise-level timeout in addition to request options.
+- Fix: web jobs now use a process-level shared job store, then-default 50 fetched reviews, 12 selected AI reviews, 280 chars per selected review, a 120-second job timeout, and a 45-second AI timeout. Google Play scraping now also has a promise-level timeout in addition to request options.
 - Follow-up fix: local startup now exports the macOS HTTPS proxy to the Next.js backend, and Google Play scraping falls back to parsing first-page web reviews when the batchexecute review endpoint times out or disconnects.
 - Validation completed: `npm test`, `npm run build`, and a local browser check on `http://localhost:3000`.
 
@@ -133,6 +133,13 @@ Smoke-test notes:
 - Async job architecture: production web jobs now require Upstash Redis and QStash. Redis stores job state, active-job dedupe, and completed result cache; QStash invokes the signed worker route `/api/analyze/jobs/run`.
 - Client alignment: the homepage polls for up to 120 seconds, and the Chrome extension now uses the same async job API instead of the synchronous `/api/analyze` endpoint.
 - Google Play support fix: web fallback disables `got` retries and uses a short fallback timeout so scraping does not consume the whole worker budget.
+
+### 2026-06-01: Review samples were too small on several sources
+
+- Symptom: Google Play analysis commonly stopped at 50 reviews, Product Hunt returned only 1 item for some products, and App Store could return only a small country-specific set such as 8 reviews.
+- Root cause: web and extension jobs defaulted to a 50-item fetched evidence pool; Product Hunt ingestion currently uses official GraphQL `comments`, not Product Hunt product-page review text; App Store RSS was limited to the country in the URL before web fallback.
+- Fix: raised `/api/analyze` and async web job fetched evidence defaults to 150 while keeping 12 selected AI reviews at 280 chars for latency. App Store RSS now tries the URL country first, then `us`, `cn`, `jp`, `gb`, `ca`, and `au`, deduping reviews before falling back to product-page serialized data.
+- Product Hunt follow-up: add a dedicated product-page `/reviews` ingestion path or another supported Product Hunt reviews data source. Official API only exposes `comments` connection plus review count/rating metadata for posts.
 
 ## Remaining Todo
 

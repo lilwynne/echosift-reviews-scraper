@@ -55,7 +55,7 @@ The frontend has been simplified into a lightweight free-only flow with no auth 
   - Added background in-flight request dedupe for repeated clicks on the same URL.
   - Added `chrome.storage.session` success caching with an in-memory fallback.
   - Added a 90-second analysis request timeout and clearer loading copy.
-  - Aligned `/api/analyze` default `ANALYSIS_MAX_REVIEWS` to 50.
+  - Kept `/api/analyze` AI input bounded while allowing a larger fetched evidence pool.
 
 - Improved App Store ingestion coverage:
   - Kept Apple RSS as the first review source.
@@ -76,7 +76,7 @@ All sources:
 ```env
 REVIEWS_MAX_REVIEWS=100
 REVIEWS_REQUEST_TIMEOUT_MS=120000
-ANALYSIS_MAX_REVIEWS=50
+ANALYSIS_MAX_REVIEWS=150
 ANALYSIS_REVIEW_TEXT_MAX_CHARS=1200
 ```
 

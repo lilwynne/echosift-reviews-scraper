@@ -100,7 +100,7 @@ http://127.0.0.1:3000
   - Handles normalized review evidence, lightweight AI prompt formatting, empty-review short-circuiting, local metric/evidence composition, and deterministic fallback when AI fails.
 - `lib/analyze-jobs.ts`
   - Production uses Upstash Redis for job/result/cache state and QStash for worker delivery; local/test falls back to the in-memory adapter.
-  - Web job defaults: `WEB_ANALYSIS_MAX_REVIEWS=50`, `WEB_ANALYSIS_SELECTED_REVIEW_LIMIT=12`, `WEB_ANALYSIS_REVIEW_TEXT_MAX_CHARS=280`, `ANALYSIS_JOB_TIMEOUT_MS=120000`, `AI_ANALYSIS_TIMEOUT_MS=45000`.
+  - Web job defaults: `WEB_ANALYSIS_MAX_REVIEWS=150`, `WEB_ANALYSIS_SELECTED_REVIEW_LIMIT=12`, `WEB_ANALYSIS_REVIEW_TEXT_MAX_CHARS=280`, `ANALYSIS_JOB_TIMEOUT_MS=120000`, `AI_ANALYSIS_TIMEOUT_MS=45000`.
   - Reuses the existing process-level analysis concurrency slot before executing the background job.
 - `app/api/reviews/route.ts`
   - Backend API route for testing raw review ingestion.
@@ -323,7 +323,7 @@ Optional environment variables:
 ```env
 REVIEWS_MAX_REVIEWS=100
 REVIEWS_REQUEST_TIMEOUT_MS=30000
-ANALYSIS_MAX_REVIEWS=50
+ANALYSIS_MAX_REVIEWS=150
 ANALYSIS_SELECTED_REVIEW_LIMIT=12
 ANALYSIS_REVIEW_TEXT_MAX_CHARS=280
 UPSTASH_REDIS_REST_URL=https://...
@@ -332,7 +332,7 @@ QSTASH_TOKEN=...
 QSTASH_CURRENT_SIGNING_KEY=...
 QSTASH_NEXT_SIGNING_KEY=...
 APP_BASE_URL=https://echosift.online
-WEB_ANALYSIS_MAX_REVIEWS=50
+WEB_ANALYSIS_MAX_REVIEWS=150
 WEB_ANALYSIS_SELECTED_REVIEW_LIMIT=12
 WEB_ANALYSIS_REVIEW_TEXT_MAX_CHARS=280
 ANALYSIS_JOB_TTL_MS=1800000
@@ -351,7 +351,7 @@ Implementation details:
 - Pagination uses `pageInfo.hasNextPage` and `pageInfo.endCursor`, looping until all available comments are fetched or the active max review count is reached.
 - Public helper signature is `fetchReviews(url, options?)`, where `options.maxReviews` can override the default `REVIEWS_MAX_REVIEWS` for a single call. Existing `fetchReviews(url)` calls still use `REVIEWS_MAX_REVIEWS`.
 - `/api/reviews` intentionally keeps the default ingestion behavior and does not pass `maxReviews`.
-- `/api/analyze` passes `ANALYSIS_MAX_REVIEWS` so Product Hunt analysis defaults to one 50-comment GraphQL page instead of two pages for the default 100-review ingestion cap.
+- `/api/analyze` passes `ANALYSIS_MAX_REVIEWS`; the default fetched evidence pool is 150 reviews/comments while the AI prompt still uses the selected-review cap.
 - Web jobs pass `WEB_ANALYSIS_MAX_REVIEWS` and then select at most `WEB_ANALYSIS_SELECTED_REVIEW_LIMIT` reviews for the AI prompt. The response still returns the full fetched evidence pool, capped by `WEB_ANALYSIS_MAX_REVIEWS`.
 - Normalized Product Hunt comments include `text`, `author`, `authorUsername`, `date`, `votes`, `productName`, and `sourceUrl`.
 - Product Hunt response includes `provider: "product-hunt-graphql"` and a `product` metadata object.
@@ -372,20 +372,20 @@ Implementation details:
 ## Performance Notes
 
 - Product Hunt analysis was slow because `/api/analyze` waited for full review ingestion and then sent every fetched review body to the AI provider.
-- The first optimization keeps response shape and UI untouched while reducing default analysis input size:
-  - `ANALYSIS_MAX_REVIEWS=50` limits analysis ingestion to the first page for Product Hunt.
+- The current optimization keeps response shape and UI untouched while limiting AI prompt size:
+  - `ANALYSIS_MAX_REVIEWS=150` raises the fetched evidence pool beyond the old 50-item cap.
   - `ANALYSIS_SELECTED_REVIEW_LIMIT=12` and `ANALYSIS_REVIEW_TEXT_MAX_CHARS=280` cap the synchronous compatibility prompt.
   - `[ANALYZE_TIMING]` server logs expose scrape, analysis, and total durations.
 - The webpage now uses async jobs for better perceived latency and larger evidence collection:
   - The browser submits `POST /api/analyze/jobs`, then polls `GET /api/analyze/jobs/{jobId}` every 1.5 seconds.
   - Status maps to existing loading UI steps: queued/scraping, analyzing, completed.
-  - Jobs default to fetching 50 reviews, selecting 12 high-value reviews for AI, and trimming each selected review to 280 characters.
+  - Jobs default to fetching 150 reviews, selecting 12 high-value reviews for AI, and trimming each selected review to 280 characters.
   - Selection favors reviews with ratings, longer text, pain/request keywords, votes, and recency.
   - AI returns only a lightweight insight draft; metrics, typical voices, and evidence IDs are built locally from the full `reviews` evidence pool.
 - Analysis cache keys now use `analysis:v3` and include normalized URL, language, max review count, selected review limit, review text character cap, and model type.
 - `scripts/test-review-ingestion.mjs` covers the `maxReviews` override and verifies Product Hunt stops pagination when the requested limit is reached.
 - App Store ingestion tests cover RSS-first behavior, RSS-empty web fallback parsing, and missing `serialized-server-data` returning an empty result without throwing.
-- `scripts/test-analyze-route.mjs` covers the zero-review `/api/analyze` short-circuit path, job completion, worker execution, cache-hit jobs, failed jobs, 50-review ingestion, 12-review AI selection, AI fallback, job timeout, and local evidence mapping.
+- `scripts/test-analyze-route.mjs` covers the zero-review `/api/analyze` short-circuit path, job completion, worker execution, cache-hit jobs, failed jobs, configured review ingestion, 12-review AI selection, AI fallback, job timeout, and local evidence mapping.
 
 Error response format:
 
