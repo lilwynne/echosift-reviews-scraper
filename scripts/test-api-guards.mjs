@@ -218,7 +218,7 @@ test("analysis cache key normalizes url and includes language", () => {
     }
   );
 
-  assert.match(left, /^analysis:v3:[a-f0-9]{32}$/);
+  assert.match(left, /^analysis:v5:[a-f0-9]{32}$/);
   assert.equal(left, right);
   assert.notEqual(left, otherLanguage);
   assert.notEqual(left, otherMaxReviews);

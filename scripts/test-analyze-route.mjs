@@ -9,6 +9,7 @@ const originalAnalysisJobTimeout = process.env.ANALYSIS_JOB_TIMEOUT_MS;
 const originalAiAnalysisTimeout = process.env.AI_ANALYSIS_TIMEOUT_MS;
 const originalReviewRequestTimeout = process.env.REVIEWS_REQUEST_TIMEOUT_MS;
 const originalWebAnalysisMaxReviews = process.env.WEB_ANALYSIS_MAX_REVIEWS;
+const originalProductHuntApiToken = process.env.PRODUCT_HUNT_API_TOKEN;
 const originalFetch = globalThis.fetch;
 const originalConsoleInfo = console.info;
 
@@ -79,6 +80,12 @@ function restoreEnv() {
   } else {
     process.env.WEB_ANALYSIS_MAX_REVIEWS = originalWebAnalysisMaxReviews;
   }
+
+  if (originalProductHuntApiToken === undefined) {
+    delete process.env.PRODUCT_HUNT_API_TOKEN;
+  } else {
+    process.env.PRODUCT_HUNT_API_TOKEN = originalProductHuntApiToken;
+  }
 }
 
 function createAnalyzeRequest(url) {
@@ -119,6 +126,36 @@ function createRunAnalyzeJobRequest(jobId) {
       jobId
     })
   });
+}
+
+function getExpectedEmptyAppStoreRequestUrls(appUrl, appId) {
+  const countries = ["cn", "us", "jp", "gb", "ca", "au"];
+  const sorts = ["mostrecent", "mosthelpful"];
+  const urls = [];
+
+  for (const country of countries) {
+    const isPrimaryCountry = country === "cn";
+
+    for (const sort of sorts) {
+      const pageLimit =
+        isPrimaryCountry || sort === "mosthelpful" ? 3 : 1;
+
+      for (let page = 1; page <= pageLimit; page += 1) {
+        const url = `https://itunes.apple.com/${country}/rss/customerreviews/page=${page}/id=${appId}/sortby=${sort}/json`;
+        urls.push(url);
+
+        if (isPrimaryCountry && page === pageLimit) {
+          for (let retry = 0; retry < 4; retry += 1) {
+            urls.push(url);
+          }
+        }
+      }
+    }
+  }
+
+  urls.push(appUrl);
+
+  return urls;
 }
 
 async function getAnalyzeJob(jobId) {
@@ -211,15 +248,10 @@ test("analyze route returns empty analysis without an AI key when no reviews are
     }
   });
   assert.deepEqual(payload.analysis, createEmptyAnalysisResult());
-  assert.deepEqual(requestedUrls, [
-    "https://itunes.apple.com/cn/rss/customerreviews/page=1/id=123456789/sortby=mostrecent/json",
-    "https://itunes.apple.com/us/rss/customerreviews/page=1/id=123456789/sortby=mostrecent/json",
-    "https://itunes.apple.com/jp/rss/customerreviews/page=1/id=123456789/sortby=mostrecent/json",
-    "https://itunes.apple.com/gb/rss/customerreviews/page=1/id=123456789/sortby=mostrecent/json",
-    "https://itunes.apple.com/ca/rss/customerreviews/page=1/id=123456789/sortby=mostrecent/json",
-    "https://itunes.apple.com/au/rss/customerreviews/page=1/id=123456789/sortby=mostrecent/json",
-    appUrl
-  ]);
+  assert.deepEqual(
+    requestedUrls,
+    getExpectedEmptyAppStoreRequestUrls(appUrl, "123456789")
+  );
 });
 
 test("analyze route does not cache empty App Store scrape results", async () => {
@@ -258,7 +290,10 @@ test("analyze route does not cache empty App Store scrape results", async () => 
   assert.equal(secondResponse.status, 200);
   assert.equal((await firstResponse.json()).reviewCount, 0);
   assert.equal((await secondResponse.json()).reviewCount, 0);
-  assert.equal(fetchCalls, 14);
+  assert.equal(
+    fetchCalls,
+    getExpectedEmptyAppStoreRequestUrls(appUrl, "123456789").length * 2
+  );
 });
 
 test("analyze route returns App Store web fallback reviews and provider metadata", async () => {
@@ -357,6 +392,149 @@ test("analyze route returns App Store web fallback reviews and provider metadata
   assert.deepEqual(
     payload.analysis.deepInsights.highFreqPainPoints,
     sampleDraft.highFreqPainPoints
+  );
+});
+
+test("analyze route classifies Product Hunt comments without ratings and prefers non-maker typical voices", async () => {
+  process.env.PRODUCT_HUNT_API_TOKEN = "product-hunt-token";
+  process.env.SILICONFLOW_API_KEY = "siliconflow-test-key";
+  process.env.ANALYZE_RATE_LIMIT_MAX_REQUESTS = "100";
+  console.info = () => undefined;
+
+  const productUrl = "https://www.producthunt.com/products/echosift";
+  const makerComment = [
+    "Hey Product Hunt! I am the founder of EchoSift.",
+    "We built this after reading hundreds of launch threads by hand, and we are excited to share the product with makers today.",
+    "Our team spent months shaping the workflow, so please try the app, send feedback, and support the launch if it looks useful.",
+    "I am happy to answer any questions about the roadmap, the onboarding flow, the extension, the dashboard, and the analysis pipeline."
+  ].join(" ");
+  const positiveUserComment =
+    "Love this. The feedback summaries are super useful and help me understand launch comments quickly.";
+  const negativeUserComment =
+    "I am skeptical about the attribution. The data sources are not transparent and the results can be inaccurate.";
+  const neutralUserComment = "Does it support exporting Product Hunt comments to CSV?";
+
+  __setAnalyzeFeedbackClientFactoryForTest(() => ({
+    chat: {
+      completions: {
+        create: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify(sampleDraft)
+              }
+            }
+          ]
+        })
+      }
+    }
+  }));
+
+  let capturedUrl;
+  let capturedAuth;
+
+  globalThis.fetch = async (input, init) => {
+    const url = typeof input === "string" ? input : String(input);
+    capturedUrl = url;
+    capturedAuth = init?.headers?.Authorization;
+
+    return {
+      ok: true,
+      json: async () => ({
+        data: {
+          post: {
+            id: "post-echosift",
+            name: "EchoSift",
+            slug: "echosift",
+            tagline: "Product feedback analysis",
+            url: "https://www.producthunt.com/posts/echosift",
+            website: "https://example.com",
+            commentsCount: 4,
+            reviewsCount: 0,
+            reviewsRating: null,
+            votesCount: 500,
+            createdAt: "2026-05-01T00:00:00Z",
+            featuredAt: "2026-05-02T00:00:00Z",
+            comments: {
+              nodes: [
+                {
+                  id: "comment-maker",
+                  body: `<p>${makerComment}</p>`,
+                  createdAt: "2026-05-03T00:00:00Z",
+                  url: "https://www.producthunt.com/posts/echosift#comment-maker",
+                  votesCount: 240,
+                  user: {
+                    username: "maker",
+                    name: "Maker Example"
+                  }
+                },
+                {
+                  id: "comment-user-positive",
+                  body: `<p>${positiveUserComment}</p>`,
+                  createdAt: "2026-05-04T00:00:00Z",
+                  url: "https://www.producthunt.com/posts/echosift#comment-user-positive",
+                  votesCount: 2,
+                  user: {
+                    username: "ada",
+                    name: "Ada User"
+                  }
+                },
+                {
+                  id: "comment-user-negative",
+                  body: `<p>${negativeUserComment}</p>`,
+                  createdAt: "2026-05-05T00:00:00Z",
+                  url: "https://www.producthunt.com/posts/echosift#comment-user-negative",
+                  votesCount: 1,
+                  user: {
+                    username: "grace",
+                    name: "Grace User"
+                  }
+                },
+                {
+                  id: "comment-user-neutral",
+                  body: `<p>${neutralUserComment}</p>`,
+                  createdAt: "2026-05-06T00:00:00Z",
+                  url: "https://www.producthunt.com/posts/echosift#comment-user-neutral",
+                  votesCount: 0,
+                  user: {
+                    username: "linus",
+                    name: "Linus User"
+                  }
+                }
+              ],
+              pageInfo: {
+                hasNextPage: false,
+                endCursor: null
+              },
+              totalCount: 4
+            }
+          }
+        }
+      })
+    };
+  };
+
+  const response = await POST(createAnalyzeRequest(productUrl));
+  const payload = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(capturedUrl, "https://api.producthunt.com/v2/api/graphql");
+  assert.equal(capturedAuth, "Bearer product-hunt-token");
+  assert.equal(payload.scrapeSource, "product-hunt");
+  assert.equal(payload.scrapeProvider, "product-hunt-graphql");
+  assert.equal(payload.reviewCount, 4);
+  assert.equal(payload.analysis.emotionDistribution.positive, 50);
+  assert.equal(payload.analysis.emotionDistribution.neutral, 25);
+  assert.equal(payload.analysis.emotionDistribution.negative, 25);
+  assert.notEqual(payload.analysis.emotionDistribution.positive, 0);
+  assert.notEqual(payload.analysis.emotionDistribution.negative, 0);
+  assert.equal(payload.analysis.typicalVoices.positive, positiveUserComment);
+  assert.equal(payload.analysis.typicalVoices.neutral, neutralUserComment);
+  assert.equal(payload.analysis.typicalVoices.negative, negativeUserComment);
+  assert.notEqual(payload.analysis.typicalVoices.positive, makerComment);
+  assert.equal(
+    payload.evidence.typicalVoices.positive[0],
+    "product-hunt:comment-user-positive:2"
   );
 });
 

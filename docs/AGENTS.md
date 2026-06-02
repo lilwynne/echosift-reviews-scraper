@@ -33,6 +33,10 @@ EchoSift 是一个免费、轻量的用户评价分析工具。用户粘贴 Prod
 - 目前前端不依赖真实模型切换。
 - `POST /api/analyze` 请求体为 `{ url, language }`；前端不直接暴露模型选择。
 - 真实端到端测试需要有效 `SILICONFLOW_API_KEY`；Product Hunt 链接还需要 `PRODUCT_HUNT_API_TOKEN`。
+- Product Hunt GraphQL 评论没有单条 `rating`；情绪分布必须使用 `lib/analyze-pipeline.ts` 的文本启发式逻辑，不能让无 rating 的 Product Hunt 评论默认全中性。App Store / Google Play 仍使用 rating 逻辑。
+- Product Hunt 的 typical voices 应优先代表普通用户，不能只因为 maker/founder 置顶评论更长或 votes 更高就总选 maker 评论。
+- App Store 抓取必须优先走 Apple RSS：先 `mostrecent` 后 `mosthelpful`，URL 国家后依次尝试 `us`、`cn`、`jp`、`gb`、`ca`、`au`，主国家需要继续扫描稀疏空页并重试空的末页；只有 RSS 完全没有可用评论正文时才使用 `apple-web-page` 兜底。
+- App Store 网页兜底通常只能拿到产品页内嵌的少量可见评论，常见约 8 条；评分数量不等于可抓取评论正文数量。生产仍返回 8 条时先确认后端已部署且服务端缓存版本为 `analysis:v5`，插件 session cache 前缀为 `analysis:v4`。
 - Chrome 插件位于 `extension/`；后台会合并同一 URL 的重复分析请求，成功结果会写入 `chrome.storage.session` 并以内存缓存兜底。
 - 插件内容脚本通过 history/popstate/hashchange/focus/pageshow/visibilitychange 和点击后的短延迟检查识别 SPA URL 变化，不再全页面 MutationObserver 或 500ms 轮询。
 - 根项目 `tsconfig.json` 排除 `extension/`；插件必须使用 `extension/tsconfig.json` 通过 `cd extension && npx tsc --noEmit` 单独校验。

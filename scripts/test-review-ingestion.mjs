@@ -619,6 +619,137 @@ test("app store rss fills a small primary-country sample from fallback countries
   }
 });
 
+test("app store rss falls back to most helpful when most recent is empty", async () => {
+  const requestedUrls = [];
+  const reviewsByUrl = {
+    "https://itunes.apple.com/cn/rss/customerreviews/page=1/id=6738571698/sortby=mosthelpful/json":
+      [
+        {
+          id: {
+            label: "helpful-review-1"
+          },
+          title: {
+            label: "Helpful review"
+          },
+          content: {
+            label: "Most helpful reviews should be used when most recent is empty."
+          },
+          "im:rating": {
+            label: "5"
+          },
+          updated: {
+            label: "2026-02-03T07:00:15Z"
+          }
+        }
+      ]
+  };
+
+  globalThis.fetch = async (input) => {
+    const url = input instanceof URL ? input.toString() : String(input);
+    requestedUrls.push(url);
+
+    return {
+      ok: true,
+      json: async () => ({
+        feed: {
+          entry: reviewsByUrl[url] ?? []
+        }
+      })
+    };
+  };
+
+  try {
+    const { fetchReviews } = await loadModule();
+    const result = await fetchReviews(
+      "https://apps.apple.com/cn/app/%E5%BF%83%E7%81%B5%E6%B8%A1%E8%88%B9-%E7%81%B5%E9%AD%82%E6%91%86%E6%B8%A1%E4%BA%BA%E6%AD%A3%E7%89%88%E7%A7%BB%E6%A4%8D%E6%89%8B%E6%B8%B8/id6738571698",
+      {
+        maxReviews: 1
+      }
+    );
+
+    assert.equal(result.ok, true);
+    assert.equal(result.provider, "apple-rss");
+    assert.equal(result.count, 1);
+    assert.equal(result.reviews[0].id, "helpful-review-1");
+    assert.deepEqual(requestedUrls, [
+      "https://itunes.apple.com/cn/rss/customerreviews/page=1/id=6738571698/sortby=mostrecent/json",
+      "https://itunes.apple.com/cn/rss/customerreviews/page=1/id=6738571698/sortby=mosthelpful/json"
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
+test("app store rss scans sparse primary pages and retries empty final pages", async () => {
+  const requestedUrls = [];
+  const sparseReviewUrl =
+    "https://itunes.apple.com/cn/rss/customerreviews/page=3/id=1634743663/sortby=mostrecent/json";
+  let sparseReviewUrlCalls = 0;
+
+  globalThis.fetch = async (input) => {
+    const url = input instanceof URL ? input.toString() : String(input);
+    requestedUrls.push(url);
+
+    sparseReviewUrlCalls += url === sparseReviewUrl ? 1 : 0;
+
+    return {
+      ok: true,
+      json: async () => ({
+        feed: {
+          entry:
+            url === sparseReviewUrl && sparseReviewUrlCalls === 2
+              ? [
+                  {
+                    id: {
+                      label: "sparse-review-1"
+                    },
+                    title: {
+                      label: "Sparse review"
+                    },
+                    content: {
+                      label:
+                        "Apple can return later review pages after empty earlier pages."
+                    },
+                    "im:rating": {
+                      label: "1"
+                    },
+                    updated: {
+                      label: "2026-05-28T20:32:16Z"
+                    }
+                  }
+                ]
+              : []
+        }
+      })
+    };
+  };
+
+  try {
+    const { fetchReviews } = await loadModule();
+    const result = await fetchReviews(
+      "https://apps.apple.com/cn/app/%E5%8F%8C%E7%9B%B8/id1634743663",
+      {
+        maxReviews: 150
+      }
+    );
+
+    assert.equal(result.ok, true);
+    assert.equal(result.provider, "apple-rss");
+    assert.equal(result.count, 1);
+    assert.equal(result.reviews[0].id, "sparse-review-1");
+    assert.deepEqual(requestedUrls.slice(0, 4), [
+      "https://itunes.apple.com/cn/rss/customerreviews/page=1/id=1634743663/sortby=mostrecent/json",
+      "https://itunes.apple.com/cn/rss/customerreviews/page=2/id=1634743663/sortby=mostrecent/json",
+      sparseReviewUrl,
+      sparseReviewUrl
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv();
+  }
+});
+
 test("app store rss empty feed falls back to web page reviews", async () => {
   const requestedUrls = [];
   const requestedHeaders = [];
@@ -682,17 +813,23 @@ test("app store rss empty feed falls back to web page reviews", async () => {
     assert.equal(result.rawItems.length, 1);
     assert.deepEqual(requestedUrls, [
       "https://itunes.apple.com/cn/rss/customerreviews/page=1/id=6737188438/sortby=mostrecent/json",
+      "https://itunes.apple.com/cn/rss/customerreviews/page=1/id=6737188438/sortby=mosthelpful/json",
       "https://itunes.apple.com/us/rss/customerreviews/page=1/id=6737188438/sortby=mostrecent/json",
+      "https://itunes.apple.com/us/rss/customerreviews/page=1/id=6737188438/sortby=mosthelpful/json",
       "https://itunes.apple.com/jp/rss/customerreviews/page=1/id=6737188438/sortby=mostrecent/json",
+      "https://itunes.apple.com/jp/rss/customerreviews/page=1/id=6737188438/sortby=mosthelpful/json",
       "https://itunes.apple.com/gb/rss/customerreviews/page=1/id=6737188438/sortby=mostrecent/json",
+      "https://itunes.apple.com/gb/rss/customerreviews/page=1/id=6737188438/sortby=mosthelpful/json",
       "https://itunes.apple.com/ca/rss/customerreviews/page=1/id=6737188438/sortby=mostrecent/json",
+      "https://itunes.apple.com/ca/rss/customerreviews/page=1/id=6737188438/sortby=mosthelpful/json",
       "https://itunes.apple.com/au/rss/customerreviews/page=1/id=6737188438/sortby=mostrecent/json",
+      "https://itunes.apple.com/au/rss/customerreviews/page=1/id=6737188438/sortby=mosthelpful/json",
       appUrl
     ]);
     assertBrowserJsonHeaders(requestedHeaders[0]);
-    assertBrowserJsonHeaders(requestedHeaders[5]);
-    assert.match(requestedHeaders[6].Accept, /text\/html/);
-    assert.match(requestedHeaders[6]["User-Agent"], /Mozilla\/5\.0/);
+    assertBrowserJsonHeaders(requestedHeaders[11]);
+    assert.match(requestedHeaders[12].Accept, /text\/html/);
+    assert.match(requestedHeaders[12]["User-Agent"], /Mozilla\/5\.0/);
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnv();

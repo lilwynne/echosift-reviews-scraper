@@ -208,7 +208,7 @@ export function createAnalysisCacheKey(
     .digest("hex")
     .slice(0, 32);
 
-  return `analysis:v3:${hash}`;
+  return `analysis:v5:${hash}`;
 }
 
 export function __resetApiGuardsForTest() {

@@ -7,9 +7,10 @@ EchoSift needs to move from a purely mocked dashboard toward a real review-inges
 ## Current Status
 
 - `POST /api/reviews` exposes raw review-ingestion results for script/Postman testing.
-- `POST /api/analyze` calls the ingestion helper first, then returns the existing mock dashboard plus scraped review metadata.
+- `POST /api/analyze` calls the ingestion helper first, then returns the current `analysis` response shape plus scraped review metadata.
 - Product Hunt uses the official Product Hunt API v2 GraphQL endpoint with the user's Developer Token.
-- Apple App Store uses Apple Search for slug-only links, Apple RSS as the first review source, and App Store web page parsing as a fallback when RSS returns no reviews; it does not require a token.
+- Product Hunt GraphQL comments do not include per-comment ratings; analysis sentiment is inferred from comment text while App Store and Google Play still use rating-based sentiment.
+- Apple App Store uses Apple Search for slug-only links, Apple RSS as the first review source with sort/country/page fallbacks, and App Store web page parsing as a final fallback when RSS returns no usable review bodies; it does not require a token.
 - Google Play uses `google-play-scraper` and does not require a token.
 - The Chrome extension has a lighter content-script URL watcher, background in-flight request dedupe, session-memory result caching, and async job polling with a 120-second analysis request timeout.
 - The old Product Hunt crawler/deployment path has been removed from the repo.
@@ -27,6 +28,7 @@ EchoSift needs to move from a purely mocked dashboard toward a real review-inges
 - Use async analysis jobs for the homepage and Chrome extension. Web jobs default to `WEB_ANALYSIS_MAX_REVIEWS=150`, select `WEB_ANALYSIS_SELECTED_REVIEW_LIMIT=12` high-value reviews for AI, and trim selected review text to `WEB_ANALYSIS_REVIEW_TEXT_MAX_CHARS=280`.
 - Keep `/api/analyze` response compatible with the existing mock dashboard while adding `scrapeSource`, `reviewCount`, and `reviews`.
 - Keep `/api/analyze` as a synchronous compatibility endpoint, but move first-party clients to async jobs.
+- Keep Product Hunt typical voices representative of users: maker/founder-style launch comments should not beat ordinary user comments solely because they are longer or have more votes.
 - Keep extension type checking separate from the Next.js app because Plasmo uses its own `~src/*` alias and `extension/tsconfig.json`.
 
 ## Supported Sources
@@ -41,10 +43,12 @@ EchoSift needs to move from a purely mocked dashboard toward a real review-inges
   - Pagination uses `comments(first:, after:, order: NEWEST)` plus `pageInfo.hasNextPage` / `pageInfo.endCursor`
 - Apple App Store:
   - Host: `apps.apple.com`
-  - Provider: Apple RSS (`apple-rss`) first, App Store web page fallback (`apple-web-page`) when RSS is empty
+  - Provider: Apple RSS (`apple-rss`) first, App Store web page fallback (`apple-web-page`) only when RSS is empty after all configured attempts
   - URL format: `https://apps.apple.com/{country}/app/.../id{APP_ID}`
   - Slug-only URL format also supported: `https://apps.apple.com/{country}/app/{slug}/`
   - Slug-only links resolve `{slug}` through Apple Search, then use the returned `trackId` for RSS.
+  - RSS tries `mostrecent`, then `mosthelpful`, and scans countries in URL-country, `us`, `cn`, `jp`, `gb`, `ca`, `au` order.
+  - Primary-country RSS scanning continues across sparse empty pages and retries an empty terminal page up to 4 times before giving up.
   - Web fallback parses the product page's `serialized-server-data` and extracts visible `Review` records from `allProductReviews` / `userProductReviews`.
 - Google Play:
   - Host/path: `play.google.com/store/apps/details`
@@ -75,12 +79,13 @@ Completed:
 Smoke-test notes:
 
 - Product Hunt backend helper tests cover official GraphQL bearer-token usage, URL slug parsing, comment normalization, missing-token handling, and cursor pagination.
-- App Store helper tests cover slug-only link resolution for `https://apps.apple.com/cn/app/soul/`, Apple Search lookup followed by Apple RSS fetching, RSS-first behavior, RSS-empty web fallback parsing, and safe empty results when page data is missing.
+- App Store helper tests cover slug-only link resolution for `https://apps.apple.com/cn/app/soul/`, Apple Search lookup followed by Apple RSS fetching, RSS-first behavior, `mostrecent` to `mosthelpful` sort fallback, sparse primary-page scanning with empty-page retries, RSS-empty web fallback parsing, and safe empty results when page data is missing.
 - Invalid App Store source URLs now return `INVALID_REVIEW_SOURCE_URL`, mapped to HTTP 400 instead of 502.
 - `/api/analyze` now returns an empty analysis response immediately when ingestion returns zero reviews, without requiring an AI request.
-- Webpage analysis now runs through `POST /api/analyze/jobs` plus `GET /api/analyze/jobs/{jobId}` polling. Tests cover job completion, cache-hit jobs, failed jobs, 100 fetched reviews, 40 AI reviews, and evidence remapping.
+- Webpage analysis now runs through `POST /api/analyze/jobs` plus `GET /api/analyze/jobs/{jobId}` polling. Tests cover job completion, cache-hit jobs, failed jobs, configured fetched reviews, 12 AI reviews, and evidence mapping.
+- Product Hunt analyze-route tests cover unrated comments producing non-zero positive/negative sentiment and typical voices preferring ordinary user comments over long maker comments.
 - Live Product Hunt extraction still needs a real `PRODUCT_HUNT_API_TOKEN`.
-- App Store RSS can return an empty feed for some app/country combinations.
+- App Store RSS can return an empty feed for some app/country/sort/page combinations, and the same page can be inconsistent across retries.
 - Google Play can timeout or fail from restricted networks.
 
 ## Issue Log
@@ -114,7 +119,7 @@ Smoke-test notes:
 - Fix: added webpage-only async job endpoints, `POST /api/analyze/jobs` and `GET /api/analyze/jobs/{jobId}`. The homepage now submits a job and polls every 1.5 seconds while mapping queued/scraping/analyzing states to the existing loading UI.
 - Analysis strategy: web jobs fetch up to 100 reviews, select up to 40 high-value reviews for the AI prompt, and trim each selected review to 600 characters. The response still returns the full fetched review evidence pool.
 - Evidence fix: because AI sees a selected subset, backend evidence indexes are remapped from AI prompt indexes back to the full response `reviews` before the dashboard renders evidence buttons.
-- Cache fix: analysis cache keys now use `analysis:v3` and include normalized URL, language, max review count, selected review limit, text cap, and model type to avoid 50-review and 100-review result collisions.
+- Cache fix: this iteration moved analysis cache keys to `analysis:v4` and included normalized URL, language, max review count, selected review limit, text cap, and model type to avoid stale result collisions. The current cache key is documented in the later 2026-06-02 entries.
 - Validation completed: `npm run test:api-guards`, `npm run test:analyze-route`, `npm run test:ai-analysis`, `npm run test:review-ingestion`, `npm run lint`, `npm test`, and `npm run build` passed. Build output includes `/api/analyze/jobs` and `/api/analyze/jobs/[jobId]`.
 
 ### 2026-05-31: Google Play jobs could poll too long
@@ -141,12 +146,30 @@ Smoke-test notes:
 - Fix: raised `/api/analyze` and async web job fetched evidence defaults to 150 while keeping 12 selected AI reviews at 280 chars for latency. App Store RSS now tries the URL country first, then `us`, `cn`, `jp`, `gb`, `ca`, and `au`, deduping reviews before falling back to product-page serialized data.
 - Product Hunt follow-up: add a dedicated product-page `/reviews` ingestion path or another supported Product Hunt reviews data source. Official API only exposes `comments` connection plus review count/rating metadata for posts.
 
+### 2026-06-02: Product Hunt comments were analyzed as all neutral
+
+- Symptom: Product Hunt reports showed `emotionDistribution.neutral: 100`, and "typical user voices" were dominated by long maker/founder comments.
+- Root cause: Product Hunt comments have no `rating`, but `getReviewSentiment()` only used rating and returned `neutral` when rating was missing. `getTypicalVoices()` then selected from the neutral bucket using the general analysis score, where long text and high votes favored maker launch comments.
+- Fix: Product Hunt comments now use text-based sentiment heuristics for clear praise, congratulations, usefulness, excitement, issues, missing capabilities, attribution concerns, data transparency concerns, and other pain signals. App Store and Google Play keep rating-based sentiment. Typical voice selection now prioritizes non-maker-like Product Hunt comments, caps vote influence, and downranks overly long comments.
+- Cache fix: backend analysis cache moved to `analysis:v5`; the extension session cache prefix moved to `analysis:v4` so old all-neutral and old App Store web-fallback responses are not reused.
+- Validation completed: `npm test` and `git diff --check` passed.
+
+### 2026-06-02: App Store analysis returned only 8 reviews
+
+- Input links: `https://apps.apple.com/cn/app/.../id6738571698` (`心灵渡船-灵魂摆渡人正版移植手游`) and `https://apps.apple.com/cn/app/.../id1634743663` (`双相`).
+- Production symptom: `echosift.online` returned `scrapeProvider: "apple-web-page"` and `reviewCount: 8`, even though the App Store UI showed a much larger ratings count.
+- Root cause: Apple product pages expose only a small embedded visible review sample, while the ratings count is aggregate metadata and not the number of downloadable review bodies. The backend was reaching the `apple-web-page` fallback too early because RSS `sortby=mostrecent` can be empty, RSS pages can be sparse, and Apple can return `0` reviews for a page that returns reviews on retry.
+- Concrete RSS evidence: `id6738571698` can have empty `mostrecent` RSS while `mosthelpful` returns review bodies. `id1634743663` can have empty CN RSS page 1 and page 2, while page 3 can return 50 reviews; the same page 3 request may return 0 once and then 50 after retry.
+- Fix: App Store RSS now tries `mostrecent` then `mosthelpful`, continues scanning sparse primary-country pages, retries empty terminal primary pages up to 4 times, dedupes across countries/sorts, and falls back to product-page parsing only if RSS still yields no usable review bodies.
+- Local validation: `id6738571698` returned `provider: "apple-rss"` with 150 reviews, and `id1634743663` returned `provider: "apple-rss"` with 50 reviews.
+- Cache/deploy note: backend cache keys now use `analysis:v5`, and extension session cache keys use `analysis:v4`. A backend redeploy is required for production to stop serving stale 8-review `apple-web-page` results; redeploying only the extension is insufficient.
+
 ## Remaining Todo
 
 - Configure backend `.env.local` with `PRODUCT_HUNT_API_TOKEN`.
 - Configure production with Upstash Redis/QStash env vars and `APP_BASE_URL=https://echosift.online`.
 - Rerun live Product Hunt extraction against known Product Hunt URLs through `/api/reviews`.
-- Test Apple RSS plus App Store web fallback from the deployment network with target customer app links.
+- Test Apple RSS sort/country/sparse-page fallbacks plus App Store web fallback from the deployment network with target customer app links.
 - Live-test slug-only App Store links from the deployment network and confirm Apple Search resolves the intended app when names are ambiguous.
 - Test Google Play from the deployment network and tune timeout/retry behavior if needed.
 - Decide whether `/api/analyze` should fail hard on scraping errors or fall back to mock data for MVP demos.

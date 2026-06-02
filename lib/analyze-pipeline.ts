@@ -76,6 +76,75 @@ export type AnalyzePipelineResult =
 const EVIDENCE_REVIEWS_PER_CARD = 3;
 const HIGH_VALUE_KEYWORD_RE =
   /bug|crash|slow|lag|error|fail|failed|issue|problem|request|feature|wish|hope|need|missing|improve|broken|confusing|expensive|login|sync|notification|workflow|export|import|search|offline|卡|慢|崩溃|闪退|错误|报错|失败|问题|痛点|希望|建议|需要|不能|无法|缺少|优化|改进|同步|通知|工作流|导出|导入|搜索|离线|登录|价格|付费/i;
+const PRODUCT_HUNT_POSITIVE_PATTERNS = [
+  {
+    pattern:
+      /\b(congrats|congratulations|kudos|well done|great launch|nice launch|good luck)\b/i,
+    weight: 3
+  },
+  {
+    pattern:
+      /\b(love|loved|awesome|amazing|fantastic|excellent|brilliant|impressive|promising|excited|exciting|useful|helpful|valuable|solid|slick|beautiful|clean|intuitive|must-have|game changer)\b/i,
+    weight: 2
+  },
+  {
+    pattern:
+      /\b(looks|sounds|seems)\s+(great|awesome|promising|useful|helpful|interesting|impressive)\b/i,
+    weight: 2
+  },
+  {
+    pattern: /\b(can'?t wait|looking forward|eager to try|happy to see)\b/i,
+    weight: 2
+  },
+  {
+    pattern: /恭喜|祝贺|很棒|喜欢|有用|好用|认可|兴奋|期待|赞|优秀|厉害|不错|有帮助/,
+    weight: 2
+  }
+];
+const PRODUCT_HUNT_NEGATIVE_PATTERNS = [
+  {
+    pattern:
+      /\b(bug|bugs|buggy|crash|crashes|crashed|broken|unusable|not usable|doesn'?t work|not working|failed|fails|failure|error|errors|issues?|problems?|pain point|friction)\b/i,
+    weight: 3
+  },
+  {
+    pattern:
+      /\b(missing|lacks?|lack of|wish it had|needs? to|need to improve|should support|no way to)\b/i,
+    weight: 2
+  },
+  {
+    pattern:
+      /\bwithout\s+(support|a\s+way|any\s+way|export|import|integration|docs?|pricing|transparency)\b/i,
+    weight: 2
+  },
+  {
+    pattern:
+      /\b(inaccurate|not accurate|wrong|misleading|unreliable|opaque|not transparent|black box|disappoint(?:ed|ing)?|skeptical|concerned|confusing|hard to use|too expensive|overpriced)\b/i,
+    weight: 3
+  },
+  {
+    pattern:
+      /\b(data|sources?|attribution|results?)\b.{0,48}\b(opaque|unclear|not transparent|wrong|inaccurate|unreliable|questionable)\b/i,
+    weight: 3
+  },
+  {
+    pattern:
+      /\b(opaque|unclear|not transparent|wrong|inaccurate|unreliable|questionable)\b.{0,48}\b(data|sources?|attribution|results?)\b/i,
+    weight: 3
+  },
+  {
+    pattern: /\b(how|why)\b.{0,40}\b(trust|verify|accurate|privacy|secure)\b/i,
+    weight: 2
+  },
+  {
+    pattern:
+      /不可用|不能用|无法使用|不准确|错误归因|归因不准|数据不透明|来源不透明|缺少|缺失|失望|质疑|担心|困惑|太贵|问题|痛点|崩溃|闪退|失败/,
+    weight: 3
+  }
+];
+const PRODUCT_HUNT_MAKER_VOICE_RE =
+  /\b(hey\s+(product\s+hunt|ph)|i'?m\s+(the\s+)?(founder|co-founder|maker|creator)|as\s+(the\s+)?(founder|co-founder|maker)|maker\s+of|we\s+(built|created|made|launched|started|are\s+launching|just\s+launched|have\s+been\s+working|spent)|we'?re\s+(launching|building)|our\s+(team|product|app)|my\s+team|happy\s+to\s+answer|ask\s+me\s+anything|thanks?.{0,60}\b(checking|trying|supporting|feedback|launch))\b/i;
+const CONTRAST_RE = /\b(but|however|though|although|yet)\b|但是|但|不过|然而/;
 
 function elapsedMs(start: number) {
   return Math.round(performance.now() - start);
@@ -144,17 +213,63 @@ function filterReviewsBySentiment(
   return reviews.filter((review) => getReviewSentiment(review) === sentiment);
 }
 
-function getReviewSentiment(review: ReviewEvidence): ReviewSentiment {
-  if (typeof review.rating !== "number") {
-    return "neutral";
+function getProductHuntTextSentimentScore(review: ReviewEvidence) {
+  const text = `${review.title ?? ""} ${review.text}`.replace(/\s+/g, " ").trim();
+  let positive = 0;
+  let negative = 0;
+
+  for (const { pattern, weight } of PRODUCT_HUNT_POSITIVE_PATTERNS) {
+    if (pattern.test(text)) {
+      positive += weight;
+    }
   }
 
-  if (Number(review.rating) >= 4) {
+  for (const { pattern, weight } of PRODUCT_HUNT_NEGATIVE_PATTERNS) {
+    if (pattern.test(text)) {
+      negative += weight;
+    }
+  }
+
+  return {
+    positive,
+    negative
+  };
+}
+
+function getProductHuntTextSentiment(review: ReviewEvidence): ReviewSentiment {
+  const score = getProductHuntTextSentimentScore(review);
+  const text = `${review.title ?? ""} ${review.text}`;
+
+  if (score.negative > 0 && CONTRAST_RE.test(text) && score.negative >= score.positive) {
+    return "negative";
+  }
+
+  if (score.negative >= score.positive + 1) {
+    return "negative";
+  }
+
+  if (score.positive >= score.negative + 1) {
     return "positive";
   }
 
-  if (Number(review.rating) <= 2) {
+  return "neutral";
+}
+
+function getReviewSentiment(review: ReviewEvidence): ReviewSentiment {
+  if (typeof review.rating === "number" && Number(review.rating) >= 4) {
+    return "positive";
+  }
+
+  if (typeof review.rating === "number" && Number(review.rating) <= 2) {
     return "negative";
+  }
+
+  if (typeof review.rating === "number") {
+    return "neutral";
+  }
+
+  if (review.source === "product-hunt") {
+    return getProductHuntTextSentiment(review);
   }
 
   return "neutral";
@@ -379,19 +494,123 @@ function resolveInsightEvidenceIds(
   return getFallbackEvidenceIds(reviews, fallbackSentiment, fallbackOffset);
 }
 
-function getTypicalVoiceReview(
-  reviews: ReviewEvidence[],
+function isLikelyMakerVoice(review: ReviewEvidence) {
+  if (review.source !== "product-hunt") {
+    return false;
+  }
+
+  return PRODUCT_HUNT_MAKER_VOICE_RE.test(
+    `${review.title ?? ""} ${review.text}`.replace(/\s+/g, " ").trim()
+  );
+}
+
+function getTypicalVoiceLengthScore(textLength: number) {
+  if (textLength <= 0) {
+    return -10;
+  }
+
+  if (textLength < 24) {
+    return textLength / 6;
+  }
+
+  if (textLength <= 260) {
+    return 10 + Math.min(10, (textLength - 24) / 24);
+  }
+
+  return Math.max(4, 20 - Math.min(16, (textLength - 260) / 30));
+}
+
+function scoreReviewForTypicalVoice(
+  review: ReviewEvidence,
   sentiment: ReviewSentiment
+) {
+  const textLength = review.text.trim().length;
+  const rating = typeof review.rating === "number" ? review.rating : undefined;
+  const votes = typeof review.votes === "number" ? review.votes : 0;
+  let score = getTypicalVoiceLengthScore(textLength);
+
+  if (review.source === "product-hunt") {
+    const sentimentScore = getProductHuntTextSentimentScore(review);
+
+    if (sentiment === "positive") {
+      score += sentimentScore.positive * 2;
+    } else if (sentiment === "negative") {
+      score += sentimentScore.negative * 2;
+    } else if (sentimentScore.positive + sentimentScore.negative === 0) {
+      score += 3;
+    }
+  } else if (rating !== undefined) {
+    score += 6;
+  }
+
+  if (HIGH_VALUE_KEYWORD_RE.test(`${review.title ?? ""} ${review.text}`)) {
+    score += sentiment === "negative" ? 4 : 2;
+  }
+
+  score += Math.min(4, Math.log2(Math.max(0, votes) + 1) * 1.2);
+
+  if (textLength > 420) {
+    score -= Math.min(18, (textLength - 420) / 45);
+  }
+
+  if (isLikelyMakerVoice(review)) {
+    score -= 12;
+  }
+
+  return score;
+}
+
+function compareTypicalVoiceReviews(sentiment: ReviewSentiment) {
+  return (left: ReviewEvidence, right: ReviewEvidence) => {
+    const leftMaker = isLikelyMakerVoice(left);
+    const rightMaker = isLikelyMakerVoice(right);
+
+    if (leftMaker !== rightMaker) {
+      return leftMaker ? 1 : -1;
+    }
+
+    const scoreDelta =
+      scoreReviewForTypicalVoice(right, sentiment) -
+      scoreReviewForTypicalVoice(left, sentiment);
+
+    if (scoreDelta !== 0) {
+      return scoreDelta;
+    }
+
+    return left.reviewIndex - right.reviewIndex;
+  };
+}
+
+function getTypicalVoiceReviews(
+  reviews: ReviewEvidence[],
+  sentiment: ReviewSentiment,
+  limit = 1
 ) {
   const candidates = filterReviewsBySentiment(reviews, sentiment);
 
   if (candidates.length === 0) {
-    return undefined;
+    return [];
   }
 
-  return [...candidates].sort(
-    (left, right) => scoreReviewForAnalysis(right) - scoreReviewForAnalysis(left)
-  )[0];
+  return [...candidates].sort(compareTypicalVoiceReviews(sentiment)).slice(0, limit);
+}
+
+function getTypicalVoiceReview(
+  reviews: ReviewEvidence[],
+  sentiment: ReviewSentiment
+) {
+  return getTypicalVoiceReviews(reviews, sentiment)[0];
+}
+
+function getTypicalVoiceEvidenceIds(
+  reviews: ReviewEvidence[],
+  sentiment: ReviewSentiment
+) {
+  return getTypicalVoiceReviews(
+    reviews,
+    sentiment,
+    EVIDENCE_REVIEWS_PER_CARD
+  ).map((review) => review.snippetId);
 }
 
 function getTypicalVoices(reviews: ReviewEvidence[]) {
@@ -424,9 +643,9 @@ function buildEvidenceMap(
       )
     ),
     typicalVoices: {
-      positive: getFallbackEvidenceIds(reviews, "positive", 0),
-      neutral: getFallbackEvidenceIds(reviews, "neutral", 0),
-      negative: getFallbackEvidenceIds(reviews, "negative", 0)
+      positive: getTypicalVoiceEvidenceIds(reviews, "positive"),
+      neutral: getTypicalVoiceEvidenceIds(reviews, "neutral"),
+      negative: getTypicalVoiceEvidenceIds(reviews, "negative")
     }
   };
 }

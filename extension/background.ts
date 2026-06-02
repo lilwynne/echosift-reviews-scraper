@@ -15,7 +15,7 @@ type SharedRequest = {
   promise: Promise<AnalyzeMessageResponse>
 }
 
-const CACHE_PREFIX = "analysis:v2:"
+const CACHE_PREFIX = "analysis:v4:"
 const DEFAULT_CACHE_TTL_MS = 30 * 60 * 1000
 const memoryCache = new Map<string, CacheEntry>()
 const inFlightRequests = new Map<string, SharedRequest>()

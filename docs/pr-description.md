@@ -59,9 +59,18 @@ The frontend has been simplified into a lightweight free-only flow with no auth 
 
 - Improved App Store ingestion coverage:
   - Kept Apple RSS as the first review source.
-  - Added an App Store product-page fallback that parses `serialized-server-data` when RSS returns no reviews.
+  - Added RSS sort fallback from `mostrecent` to `mosthelpful`.
+  - Added sparse primary-country page scanning and empty terminal-page retries for unstable Apple RSS responses.
+  - Kept country fallback order as URL country, then `us`, `cn`, `jp`, `gb`, `ca`, and `au`, with dedupe across RSS attempts.
+  - Added an App Store product-page fallback that parses `serialized-server-data` only when the configured RSS attempts return no usable review bodies.
   - Added `provider: "apple-web-page"` for fallback results.
   - Added a zero-review `/api/analyze` short-circuit so empty ingestion does not spend an AI request.
+
+- Fixed Product Hunt analysis for unrated comments:
+  - Product Hunt comments now use local text sentiment heuristics instead of defaulting missing `rating` to neutral.
+  - App Store and Google Play still use rating-based sentiment.
+  - Typical voices now prioritize ordinary Product Hunt users over maker/founder-style launch comments and cap long-text/high-vote influence.
+  - Backend analysis cache keys moved to `analysis:v5`; extension session cache keys moved to `analysis:v4`.
 
 ## Current Environment Variables
 
@@ -139,6 +148,7 @@ Passed locally:
 
 ```bash
 npm run test:review-ingestion
+npm test
 npm run lint
 npm run build
 cd extension && npx tsc --noEmit
@@ -154,6 +164,10 @@ Build output includes:
 
 Product Hunt GraphQL helper tests cover bearer-token usage, URL slug parsing, comment normalization, cursor pagination, and missing-token handling.
 
+Product Hunt analyze-route tests cover unrated comments producing non-zero positive/negative sentiment and typical voices selecting an ordinary user comment instead of a longer, higher-vote maker/founder comment.
+
+App Store review-ingestion tests cover RSS-first behavior, `mostrecent` to `mosthelpful` fallback, sparse page scanning with empty-page retries, web-page fallback parsing, and missing `serialized-server-data` empty results.
+
 Frontend verification:
 
 - `npm run lint`
@@ -164,7 +178,8 @@ Frontend verification:
 ## Risks / Follow-Ups
 
 - Live Product Hunt validation still needs to be run with a valid `PRODUCT_HUNT_API_TOKEN`.
-- Apple RSS can return empty feeds for some app/country combinations; the App Store web fallback only uses review snippets embedded in the public product page HTML and does not paginate all historical reviews.
+- Apple RSS can return empty or inconsistent feeds for some app/country/sort/page combinations. The App Store web fallback only uses review snippets embedded in the public product page HTML and does not paginate all historical reviews, so `apple-web-page` results may contain only around 8 reviews.
+- Production needs a backend deploy for the `analysis:v5` server cache key; extension-only deploys cannot clear stale backend `apple-web-page` results.
 - Google Play scraping is unofficial and may fail when Google changes markup or blocks the runtime network.
 - `/api/analyze` currently fails if scraping fails. For MVP demos, consider whether it should fall back to mock dashboard data.
 - Next step is to feed normalized `reviews` into the AI analysis pipeline.
