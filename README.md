@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  Lightweight AI feedback analysis for Product Hunt, App Store, and Google Play.
+  Lightweight AI feedback analysis for Product Hunt, App Store, and Google Play, available as a web app and Chrome extension.
 </p>
 
 <p align="center">
@@ -27,7 +27,7 @@
 
 ## Introduction
 
-EchoSift is a lightweight web app for turning public product feedback into product-ready insights. Paste a Product Hunt, Apple App Store, or Google Play link, and EchoSift fetches recent user comments or reviews, normalizes them, sends the review text through an AI analysis pipeline, and presents sentiment, high-value signals, pain points, feature requests, and representative user voices in a focused dashboard.
+EchoSift is a lightweight web app and Manifest V3 Chrome extension for turning public product feedback into product-ready insights. Paste a Product Hunt, Apple App Store, or Google Play link in the web app, or launch the Chrome extension directly on a supported product page. EchoSift fetches recent user comments or reviews, normalizes them, sends the review text through an AI analysis pipeline, and presents sentiment, high-value signals, pain points, feature requests, and representative user voices in a focused dashboard.
 
 This project was built with a Vibe Coding workflow: AI-assisted generation was used to accelerate implementation while keeping the product flow, API behavior, and UI experience grounded in the codebase.
 
@@ -39,6 +39,8 @@ This project was built with a Vibe Coding workflow: AI-assisted generation was u
 - 📊 Display KPI cards, sentiment distribution, and a current sentiment snapshot with Recharts.
 - 🧩 Organize pain points, feature requests, and typical user voices in a priority-style insight board.
 - 🧾 Expand insight cards to inspect supporting review evidence from the original scraped data.
+- 🧷 Use the Chrome extension to analyze supported product pages from an in-page floating button.
+- ⚡ Reuse in-flight extension analysis requests and cache successful same-page results in the browser session.
 - 🌐 Switch the UI between Simplified Chinese, Traditional Chinese, and English.
 - 🛡️ Protect the analysis API with URL validation, rate limiting, concurrency limits, request timeouts, and an in-memory analysis cache.
 
@@ -62,6 +64,13 @@ This project was built with a Vibe Coding workflow: AI-assisted generation was u
 - Lucide React
 - Recharts
 
+### Chrome Extension
+
+- Plasmo
+- Chrome Extension Manifest V3
+- React content-script UI
+- Background service worker for API calls, request dedupe, and browser-session caching
+
 ### Backend / API
 
 - Next.js API Routes
@@ -81,6 +90,7 @@ This project was built with a Vibe Coding workflow: AI-assisted generation was u
 
 - Node.js built-in test runner
 - Focused tests for review ingestion, API guards, caching, and AI analysis behavior
+- Separate Chrome extension type checking and production build validation
 
 ## Quick Start
 
@@ -176,6 +186,50 @@ Build and run the production server locally:
 ```bash
 npm run build
 npm start
+```
+
+### Chrome Extension
+
+The Chrome extension lives in `extension/` and is built separately from the Next.js app. It injects a floating `一键分析评论` button on supported product pages:
+
+- Product Hunt: `https://www.producthunt.com/products/*`
+- App Store: `https://apps.apple.com/*/app/*`
+- Google Play: `https://play.google.com/store/apps/details*`
+
+Product Hunt `/posts/*` pages are intentionally ignored in the first version.
+
+Install extension dependencies and start the development build:
+
+```bash
+cd extension
+npm install
+npm run dev
+```
+
+Load the generated development extension from `extension/build/chrome-mv3-dev` through `chrome://extensions` with Developer mode enabled.
+
+Validate and build the production extension:
+
+```bash
+cd extension
+npx tsc --noEmit
+npm run build
+npm run package
+```
+
+Load the production extension from `extension/build/chrome-mv3-prod`.
+
+By default, the extension calls `https://echosift.online` and uses the async analysis job API: `POST /api/analyze/jobs`, then polling `GET /api/analyze/jobs/{jobId}`. Override the backend during development or build:
+
+```bash
+PLASMO_PUBLIC_API_BASE_URL=http://localhost:3000 npm run dev
+```
+
+Optional build-time controls:
+
+```bash
+PLASMO_PUBLIC_ANALYSIS_TIMEOUT_MS=120000
+PLASMO_PUBLIC_ANALYSIS_CACHE_TTL_MS=1800000
 ```
 
 ## License

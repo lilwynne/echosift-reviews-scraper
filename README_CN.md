@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  轻量筛出 Product Hunt、App Store 和 Google Play 用户评价里的真实信号。
+  以 Web 应用和 Chrome 扩展轻量筛出 Product Hunt、App Store 和 Google Play 用户评价里的真实信号。
 </p>
 
 <p align="center">
@@ -27,7 +27,7 @@
 
 ## 项目介绍
 
-EchoSift 是一个轻量级 Web 应用，用于把公开产品反馈转化为可用于产品决策的洞察。用户粘贴 Product Hunt、Apple App Store 或 Google Play 链接后，EchoSift 会抓取近期用户评论或评价，进行统一格式化处理，再通过 AI 分析流程提炼情绪、关键高价值信号、高频痛点、功能请求和代表性用户原话，并以聚焦的仪表盘展示。
+EchoSift 是一个轻量级 Web 应用和 Manifest V3 Chrome 扩展，用于把公开产品反馈转化为可用于产品决策的洞察。用户可以在 Web 应用里粘贴 Product Hunt、Apple App Store 或 Google Play 链接，也可以在受支持的产品页面上直接通过 Chrome 扩展发起分析。EchoSift 会抓取近期用户评论或评价，进行统一格式化处理，再通过 AI 分析流程提炼情绪、关键高价值信号、高频痛点、功能请求和代表性用户原话，并以聚焦的仪表盘展示。
 
 本项目采用 Vibe Coding 工作流构建：通过 AI 辅助生成加速实现，同时让产品流程、API 行为和界面体验都以当前代码逻辑为准。
 
@@ -39,6 +39,8 @@ EchoSift 是一个轻量级 Web 应用，用于把公开产品反馈转化为可
 - 📊 使用 Recharts 展示 KPI 卡片、情绪分布和当前情绪快照。
 - 🧩 以优先级看板形式组织痛点、功能请求和典型用户声音。
 - 🧾 支持展开洞察卡片，查看来自原始抓取数据的支撑评论证据。
+- 🧷 支持通过 Chrome 扩展在产品页面内用悬浮按钮一键分析评论。
+- ⚡ Chrome 扩展会复用进行中的同页分析请求，并在浏览器会话内缓存成功结果。
 - 🌐 支持在简体中文、繁体中文和英文界面之间切换。
 - 🛡️ 为分析 API 提供 URL 校验、频率限制、并发限制、请求超时和内存分析缓存。
 
@@ -62,6 +64,13 @@ EchoSift 是一个轻量级 Web 应用，用于把公开产品反馈转化为可
 - Lucide React
 - Recharts
 
+### Chrome 扩展
+
+- Plasmo
+- Chrome Extension Manifest V3
+- React 内容脚本界面
+- 后台 Service Worker，负责 API 请求、重复请求合并和浏览器会话缓存
+
 ### 后端 / API
 
 - Next.js API Routes
@@ -81,6 +90,7 @@ EchoSift 是一个轻量级 Web 应用，用于把公开产品反馈转化为可
 
 - Node.js 内置测试运行器
 - 针对评论抓取、API 防护、缓存和 AI 分析行为的聚焦测试
+- Chrome 扩展独立类型检查和生产构建验证
 
 ## 快速开始
 
@@ -122,7 +132,7 @@ HTTPS_PROXY=http://localhost:7897
 REVIEWS_API_DEBUG_ENABLED=false
 
 # 可选：分析控制
-ANALYSIS_MAX_REVIEWS=50
+ANALYSIS_MAX_REVIEWS=150
 ANALYSIS_SELECTED_REVIEW_LIMIT=12
 ANALYSIS_REVIEW_TEXT_MAX_CHARS=280
 ANALYSIS_CACHE_TTL_SECONDS=259200
@@ -137,7 +147,7 @@ QSTASH_NEXT_SIGNING_KEY=...
 APP_BASE_URL=https://echosift.online
 
 # 可选：网页版异步分析任务控制
-WEB_ANALYSIS_MAX_REVIEWS=50
+WEB_ANALYSIS_MAX_REVIEWS=150
 WEB_ANALYSIS_SELECTED_REVIEW_LIMIT=12
 WEB_ANALYSIS_REVIEW_TEXT_MAX_CHARS=280
 ANALYSIS_JOB_TTL_MS=1800000
@@ -176,6 +186,50 @@ npm test
 ```bash
 npm run build
 npm start
+```
+
+### Chrome 扩展
+
+Chrome 扩展位于 `extension/`，与 Next.js 应用分开构建。它会在受支持的产品页面注入悬浮的 `一键分析评论` 按钮：
+
+- Product Hunt: `https://www.producthunt.com/products/*`
+- App Store: `https://apps.apple.com/*/app/*`
+- Google Play: `https://play.google.com/store/apps/details*`
+
+第一版会刻意忽略 Product Hunt `/posts/*` 页面。
+
+安装扩展依赖并启动开发构建：
+
+```bash
+cd extension
+npm install
+npm run dev
+```
+
+在 `chrome://extensions` 中开启开发者模式，并从 `extension/build/chrome-mv3-dev` 加载生成的开发版扩展。
+
+校验并构建生产版扩展：
+
+```bash
+cd extension
+npx tsc --noEmit
+npm run build
+npm run package
+```
+
+生产版扩展从 `extension/build/chrome-mv3-prod` 加载。
+
+默认情况下，扩展会请求 `https://echosift.online`，并使用异步分析任务 API：先请求 `POST /api/analyze/jobs`，再轮询 `GET /api/analyze/jobs/{jobId}`。开发或构建时可以覆盖后端地址：
+
+```bash
+PLASMO_PUBLIC_API_BASE_URL=http://localhost:3000 npm run dev
+```
+
+可选构建期控制项：
+
+```bash
+PLASMO_PUBLIC_ANALYSIS_TIMEOUT_MS=120000
+PLASMO_PUBLIC_ANALYSIS_CACHE_TTL_MS=1800000
 ```
 
 ## 许可证
