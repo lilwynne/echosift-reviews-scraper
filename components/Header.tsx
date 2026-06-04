@@ -1,12 +1,13 @@
 "use client";
 
-import { ChevronDown, Globe2 } from "lucide-react";
+import { ChevronDown, Github, Globe2 } from "lucide-react";
 import { EchoSiftLogo } from "@/components/EchoSiftLogo";
 import {
   Language,
   languages,
   LocaleContent
 } from "@/lib/mock-data";
+import { githubRepositoryUrl } from "@/lib/links";
 
 type HeaderProps = {
   language: Language;
@@ -25,6 +26,16 @@ export function Header({
         <EchoSiftLogo tagline={content.tagline} />
 
         <div className="flex flex-wrap items-center gap-2">
+          <a
+            href={githubRepositoryUrl}
+            target="_blank"
+            rel="noreferrer"
+            aria-label={content.githubAriaLabel}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-line bg-white/10 px-3 text-sm font-semibold text-ink shadow-sm transition hover:border-cyan-300/50 hover:bg-white/15 focus:outline-none focus:ring-4 focus:ring-cyan-400/15"
+          >
+            <Github className="h-4 w-4" aria-hidden="true" />
+            <span>{content.githubLabel}</span>
+          </a>
           <label className="relative flex items-center">
             <span className="sr-only">{content.languageLabel}</span>
             <Globe2

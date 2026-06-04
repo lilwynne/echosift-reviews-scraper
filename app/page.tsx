@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { AppFooter } from "@/components/AppFooter";
 import { Dashboard } from "@/components/Dashboard";
 import { Header } from "@/components/Header";
 import { HeroAnalyzer } from "@/components/HeroAnalyzer";
@@ -252,6 +253,7 @@ export default function Home() {
         </div>
       )}
       <UseCases content={content.useCases} />
+      <AppFooter content={content.footer} />
     </div>
   );
 }

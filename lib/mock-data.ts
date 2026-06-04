@@ -55,7 +55,9 @@ export const localizedContent = {
   "zh-CN": {
     header: {
       tagline: "用户评价分析与竞品调研",
-      languageLabel: "选择语言"
+      languageLabel: "选择语言",
+      githubLabel: "GitHub",
+      githubAriaLabel: "在 GitHub 打开 EchoSift 仓库"
     },
     hero: {
       badge: "Product Hunt / App Store / Google Play 评价分析",
@@ -523,12 +525,19 @@ export const localizedContent = {
           icon: ShieldCheck
         }
       ]
+    },
+    footer: {
+      githubLabel: "在 GitHub 查看项目",
+      githubRepo: "lilwynne/echosift-reviews-scraper",
+      githubAriaLabel: "在 GitHub 打开 EchoSift 仓库"
     }
   },
   "zh-TW": {
     header: {
       tagline: "使用者評價分析與競品調研",
-      languageLabel: "選擇語言"
+      languageLabel: "選擇語言",
+      githubLabel: "GitHub",
+      githubAriaLabel: "在 GitHub 開啟 EchoSift repo"
     },
     hero: {
       badge: "Product Hunt / App Store / Google Play 評價分析",
@@ -996,12 +1005,19 @@ export const localizedContent = {
           icon: ShieldCheck
         }
       ]
+    },
+    footer: {
+      githubLabel: "在 GitHub 查看專案",
+      githubRepo: "lilwynne/echosift-reviews-scraper",
+      githubAriaLabel: "在 GitHub 開啟 EchoSift repo"
     }
   },
   en: {
     header: {
       tagline: "Review analysis and competitor research",
-      languageLabel: "Select language"
+      languageLabel: "Select language",
+      githubLabel: "GitHub",
+      githubAriaLabel: "Open the EchoSift repository on GitHub"
     },
     hero: {
       badge: "Product Hunt / App Store / Google Play review analysis",
@@ -1476,6 +1492,11 @@ export const localizedContent = {
           icon: ShieldCheck
         }
       ]
+    },
+    footer: {
+      githubLabel: "View project on GitHub",
+      githubRepo: "lilwynne/echosift-reviews-scraper",
+      githubAriaLabel: "Open the EchoSift repository on GitHub"
     }
   }
 };
