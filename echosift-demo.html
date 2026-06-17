@@ -1025,6 +1025,348 @@
       border-color: rgba(34, 211, 238, 0.5);
       color: var(--color-cyan-300);
     }
+    
+    .sample-preview {
+      margin-top: 48px;
+      padding-top: 48px;
+      border-top: 1px solid var(--color-border-line);
+    }
+    
+    .sample-header {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    
+    .sample-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--color-cyan-300);
+      margin-bottom: 8px;
+    }
+    
+    .sample-eyebrow svg {
+      width: 16px;
+      height: 16px;
+    }
+    
+    .sample-title {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--color-slate-100);
+      margin-bottom: 8px;
+    }
+    
+    .sample-subtitle {
+      font-size: 15px;
+      color: var(--color-slate-400);
+      max-width: 560px;
+      margin: 0 auto;
+    }
+    
+    .sample-tabs {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+    
+    .sample-tab {
+      padding: 10px 20px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--color-border-line);
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--color-slate-400);
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    
+    .sample-tab:hover {
+      border-color: rgba(34, 211, 238, 0.3);
+      color: var(--color-slate-200);
+    }
+    
+    .sample-tab.active {
+      background: rgba(34, 211, 238, 0.1);
+      border-color: rgba(34, 211, 238, 0.4);
+      color: var(--color-cyan-300);
+    }
+    
+    .sample-report {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--color-border-line);
+      border-radius: 20px;
+      padding: 32px;
+      backdrop-filter: blur(24px);
+      animation: fadeIn 0.6s ease;
+    }
+    
+    .report-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 24px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--color-border-line);
+    }
+    
+    .report-product {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    
+    .report-badge {
+      background: rgba(34, 211, 238, 0.1);
+      border: 1px solid rgba(34, 211, 238, 0.25);
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--color-cyan-300);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    .report-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--color-slate-100);
+    }
+    
+    .report-meta {
+      font-size: 13px;
+      color: var(--color-slate-500);
+      margin-top: 4px;
+    }
+    
+    .report-score {
+      text-align: right;
+    }
+    
+    .score-label {
+      font-size: 12px;
+      color: var(--color-slate-500);
+      margin-bottom: 4px;
+    }
+    
+    .score-value {
+      font-size: 32px;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--color-emerald-400), var(--color-cyan-400));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    
+    .report-summary {
+      font-size: 14px;
+      color: var(--color-slate-300);
+      line-height: 1.7;
+      margin-bottom: 24px;
+      padding: 16px;
+      background: rgba(255, 255, 255, 0.02);
+      border-radius: 12px;
+      border-left: 3px solid var(--color-cyan-500);
+    }
+    
+    .report-metrics {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    
+    .metric-card {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid var(--color-border-line);
+      border-radius: 12px;
+      padding: 16px;
+      text-align: center;
+    }
+    
+    .metric-value {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--color-slate-100);
+      margin-bottom: 4px;
+    }
+    
+    .metric-label {
+      font-size: 12px;
+      color: var(--color-slate-500);
+      margin-bottom: 8px;
+    }
+    
+    .metric-detail {
+      font-size: 11px;
+      color: var(--color-slate-600);
+      line-height: 1.4;
+    }
+    
+    .report-sections {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      margin-bottom: 24px;
+    }
+    
+    @media (max-width: 768px) {
+      .report-sections {
+        grid-template-columns: 1fr;
+      }
+      
+      .report-metrics {
+        grid-template-columns: 1fr;
+      }
+    }
+    
+    .section-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--color-slate-200);
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    .section-title svg {
+      width: 16px;
+      height: 16px;
+      color: var(--color-orange-500);
+    }
+    
+    .section-list {
+      list-style: none;
+    }
+    
+    .section-item {
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      font-size: 13px;
+      color: var(--color-slate-400);
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+    }
+    
+    .section-item:last-child {
+      border-bottom: none;
+    }
+    
+    .section-item::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--color-orange-500);
+      margin-top: 6px;
+      flex-shrink: 0;
+    }
+    
+    .report-quotes {
+      padding-top: 24px;
+      border-top: 1px solid var(--color-border-line);
+    }
+    
+    .quotes-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--color-slate-400);
+      margin-bottom: 16px;
+    }
+    
+    .quotes-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+    
+    @media (max-width: 768px) {
+      .quotes-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+    
+    .quote-card {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      padding: 16px;
+    }
+    
+    .quote-sentiment {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 6px;
+      margin-bottom: 10px;
+    }
+    
+    .quote-sentiment.positive {
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--color-emerald-400);
+    }
+    
+    .quote-sentiment.neutral {
+      background: rgba(56, 189, 248, 0.15);
+      color: #38bdf8;
+    }
+    
+    .quote-sentiment.negative {
+      background: rgba(249, 115, 22, 0.15);
+      color: var(--color-orange-500);
+    }
+    
+    .quote-text {
+      font-size: 12px;
+      color: var(--color-slate-300);
+      font-style: italic;
+      line-height: 1.6;
+    }
+    
+    .quote-source {
+      font-size: 11px;
+      color: var(--color-slate-600);
+      margin-top: 10px;
+    }
+    
+    .sample-footer {
+      text-align: center;
+      margin-top: 24px;
+    }
+    
+    .sample-cta {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: linear-gradient(135deg, var(--color-cyan-400), var(--color-cyan-500));
+      border: none;
+      border-radius: 10px;
+      padding: 12px 24px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--color-slate-950);
+      cursor: pointer;
+      transition: all 0.3s;
+      box-shadow: 0 4px 20px rgba(6, 182, 212, 0.3);
+    }
+    
+    .sample-cta:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 28px rgba(6, 182, 212, 0.4);
+    }
+    
+    .sample-cta svg {
+      width: 16px;
+      height: 16px;
+    }
   </style>
 </head>
 <body>
@@ -1101,6 +1443,126 @@
             </svg>
             Google Play
           </span>
+        </div>
+
+        <div class="sample-preview" id="samplePreview">
+          <div class="sample-header">
+            <p class="sample-eyebrow">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+                <polyline points="10 9 9 9 8 9"/>
+              </svg>
+              示例分析报告
+            </p>
+            <h2 class="sample-title">先看看分析结果长什么样</h2>
+            <p class="sample-subtitle">EchoSift 会从用户评论中提取情绪、痛点和功能请求，帮助你快速理解产品口碑</p>
+          </div>
+          
+          <div class="sample-tabs">
+            <button class="sample-tab active" data-tab="product-hunt">Product Hunt</button>
+            <button class="sample-tab" data-tab="app-store">App Store</button>
+            <button class="sample-tab" data-tab="google-play">Google Play</button>
+          </div>
+          
+          <div class="sample-report" id="sampleReport">
+            <div class="report-header">
+              <div class="report-product">
+                <span class="report-badge">Product Hunt</span>
+                <div>
+                  <h3 class="report-title">Codex 开发者助手</h3>
+                  <p class="report-meta">模拟近 30 天评论 · 642 条评价</p>
+                </div>
+              </div>
+              <div class="report-score">
+                <p class="score-label">情感得分</p>
+                <p class="score-value">86</p>
+              </div>
+            </div>
+            
+            <p class="report-summary">
+              独立开发者称赞 Codex 能理解项目上下文、改动前会解释计划。新用户希望权限审批和回滚路径更直观，弱网环境下的任务状态刷新也需要改进。
+            </p>
+            
+            <div class="report-metrics">
+              <div class="metric-card">
+                <p class="metric-value">642</p>
+                <p class="metric-label">条评价</p>
+                <p class="metric-detail">来自 Product Hunt 真实评论</p>
+              </div>
+              <div class="metric-card">
+                <p class="metric-value">238</p>
+                <p class="metric-label">高价值信号</p>
+                <p class="metric-detail">已聚类为痛点、需求和阻力</p>
+              </div>
+              <div class="metric-card">
+                <p class="metric-value">68%</p>
+                <p class="metric-label">正向占比</p>
+                <p class="metric-detail">围绕开发效率和代码解释能力</p>
+              </div>
+            </div>
+            
+            <div class="report-sections">
+              <div class="report-section">
+                <h4 class="section-title">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                  </svg>
+                  高频痛点
+                </h4>
+                <ul class="section-list">
+                  <li class="section-item">审批权限与回滚说明不够直观</li>
+                  <li class="section-item">首次运行前对会修改哪些文件缺少预期</li>
+                  <li class="section-item">长任务等待期间的进度反馈偏少</li>
+                </ul>
+              </div>
+              <div class="report-section">
+                <h4 class="section-title" style="color: var(--color-cyan-300);">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--color-cyan-400);">
+                    <path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 1 1 7.072 0l-.548.547A3.374 3.374 0 0 0 14 18.469V19a2 2 0 1 1-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                  </svg>
+                  功能请求
+                </h4>
+                <ul class="section-list">
+                  <li class="section-item" style="color: var(--color-cyan-300);">改动前自动列出影响范围</li>
+                  <li class="section-item" style="color: var(--color-cyan-300);">一键生成 PR 评论草稿和测试摘要</li>
+                  <li class="section-item" style="color: var(--color-cyan-300);">保存项目记忆快照便于下次继续</li>
+                </ul>
+              </div>
+            </div>
+            
+            <div class="report-quotes">
+              <h4 class="quotes-title">用户原话</h4>
+              <div class="quotes-grid">
+                <div class="quote-card">
+                  <span class="quote-sentiment positive">正面</span>
+                  <p class="quote-text">"Codex 像一个会先说明计划的资深搭档，能把小修复和测试补齐交给它。"</p>
+                  <p class="quote-source">Product Hunt · 2024-01-18</p>
+                </div>
+                <div class="quote-card">
+                  <span class="quote-sentiment neutral">中立</span>
+                  <p class="quote-text">"它的效率很高，但我希望在授权前更清楚知道哪些文件会被改动。"</p>
+                  <p class="quote-source">Product Hunt · 2024-01-15</p>
+                </div>
+                <div class="quote-card">
+                  <span class="quote-sentiment negative">负面</span>
+                  <p class="quote-text">"大仓库任务跑很久时，我想知道它卡在哪一步，以及是否可以安全暂停。"</p>
+                  <p class="quote-source">Product Hunt · 2024-01-12</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="sample-footer">
+            <button class="sample-cta" onclick="document.getElementById('product').scrollIntoView({behavior: 'smooth'})">
+              开始分析你的产品
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M5 12h14M12 5l7 7-7 7"/>
+              </svg>
+            </button>
+          </div>
         </div>
 
         <div class="loading-state" id="loadingState">
@@ -1731,12 +2193,184 @@
     }
     
     analyzeBtn.addEventListener('click', runAnalysis);
-    
+
     productUrlInput.addEventListener('keypress', function(e) {
       if (e.key === 'Enter') {
         runAnalysis();
       }
     });
-    
+
     resetBtn.addEventListener('click', resetAnalysis);
+
+    // Sample report data for tabs
+    const sampleData = {
+      'product-hunt': {
+        badge: 'Product Hunt',
+        title: 'Codex 开发者助手',
+        meta: '模拟近 30 天评论 · 642 条评价',
+        score: '86',
+        summary: '独立开发者称赞 Codex 能理解项目上下文、改动前会解释计划。新用户希望权限审批和回滚路径更直观，弱网环境下的任务状态刷新也需要改进。',
+        metrics: [
+          { value: '642', label: '条评价', detail: '来自 Product Hunt 真实评论' },
+          { value: '238', label: '高价值信号', detail: '已聚类为痛点、需求和阻力' },
+          { value: '68%', label: '正向占比', detail: '围绕开发效率和代码解释能力' }
+        ],
+        painPoints: [
+          '审批权限与回滚说明不够直观',
+          '首次运行前对会修改哪些文件缺少预期',
+          '长任务等待期间的进度反馈偏少'
+        ],
+        features: [
+          '改动前自动列出影响范围',
+          '一键生成 PR 评论草稿和测试摘要',
+          '保存项目记忆快照便于下次继续'
+        ],
+        quotes: [
+          { sentiment: 'positive', text: 'Codex 像一个会先说明计划的资深搭档，能把小修复和测试补齐交给它。', source: 'Product Hunt · 2024-01-18' },
+          { sentiment: 'neutral', text: '它的效率很高，但我希望在授权前更清楚知道哪些文件会被改动。', source: 'Product Hunt · 2024-01-15' },
+          { sentiment: 'negative', text: '大仓库任务跑很久时，我想知道它卡在哪一步，以及是否可以安全暂停。', source: 'Product Hunt · 2024-01-12' }
+        ]
+      },
+      'app-store': {
+        badge: 'App Store',
+        title: 'Codex 移动端',
+        meta: '模拟近 30 天评论 · 438 条评价',
+        score: '81',
+        summary: '移动端用户认可随时查看任务进度的便利，但反复提到 iPad 与桌面会话衔接还不够顺畅，跨设备同步需求强烈。',
+        metrics: [
+          { value: '438', label: '条评价', detail: '来自 App Store 真实评论' },
+          { value: '164', label: '高价值信号', detail: '已聚类为移动体验和协作阻力' },
+          { value: '61%', label: '正向占比', detail: '围绕任务查看与通知体验' }
+        ],
+        painPoints: [
+          '从桌面切到 iPad 后需要重新确认上下文',
+          '手机端查看任务时缺少完整 diff',
+          '后台任务通知有时不够及时'
+        ],
+        features: [
+          '跨设备同步当前任务状态',
+          '移动端展示更完整的 diff 摘要',
+          '允许收藏常用项目入口'
+        ],
+        quotes: [
+          { sentiment: 'positive', text: '在外面也能看任务进度很方便，尤其是等待测试跑完的时候。', source: 'App Store · 2024-01-17' },
+          { sentiment: 'neutral', text: '从桌面切到 iPad 后需要重新确认上下文，这一步有点打断。', source: 'App Store · 2024-01-14' },
+          { sentiment: 'negative', text: '手机上看不到完整 diff 时，我很难判断这次修改是否可以继续。', source: 'App Store · 2024-01-11' }
+        ]
+      },
+      'google-play': {
+        badge: 'Google Play',
+        title: 'Codex Android 版',
+        meta: '模拟近 30 天评论 · 346 条评价',
+        score: '78',
+        summary: 'Android 用户认可通知和代码摘要功能，同时集中要求离线队列、登录稳定性和长任务可见性。',
+        metrics: [
+          { value: '346', label: '条评价', detail: '来自 Google Play 真实评论' },
+          { value: '110', label: '高价值信号', detail: '已聚类为稳定性和移动执行需求' },
+          { value: '57%', label: '正向占比', detail: '围绕通知、摘要和远程跟进' }
+        ],
+        painPoints: [
+          '弱网环境下任务状态刷新不稳定',
+          '登录过期后恢复流程不够顺畅',
+          '长任务只显示摘要缺少过程节点'
+        ],
+        features: [
+          '移动端离线排队恢复网络后继续执行',
+          '失败任务提供可复制的错误摘要',
+          '长任务按步骤显示当前进度'
+        ],
+        quotes: [
+          { sentiment: 'positive', text: '通知和代码摘要很有用，我可以先判断要不要回到电脑处理。', source: 'Google Play · 2024-01-16' },
+          { sentiment: 'neutral', text: '网络不稳定时希望命令能先排队，恢复后自动继续。', source: 'Google Play · 2024-01-13' },
+          { sentiment: 'negative', text: '登录失效后任务状态不清楚，我不知道之前的分析是否还在继续。', source: 'Google Play · 2024-01-10' }
+        ]
+      }
+    };
+
+    // Tab switching functionality
+    const sampleTabs = document.querySelectorAll('.sample-tab');
+    const sampleReport = document.getElementById('sampleReport');
+
+    sampleTabs.forEach(tab => {
+      tab.addEventListener('click', function() {
+        const tabId = this.getAttribute('data-tab');
+        const data = sampleData[tabId];
+
+        // Update active tab
+        sampleTabs.forEach(t => t.classList.remove('active'));
+        this.classList.add('active');
+
+        // Update report content
+        sampleReport.innerHTML = `
+          <div class="report-header">
+            <div class="report-product">
+              <span class="report-badge">${data.badge}</span>
+              <div>
+                <h3 class="report-title">${data.title}</h3>
+                <p class="report-meta">${data.meta}</p>
+              </div>
+            </div>
+            <div class="report-score">
+              <p class="score-label">情感得分</p>
+              <p class="score-value">${data.score}</p>
+            </div>
+          </div>
+
+          <p class="report-summary">${data.summary}</p>
+
+          <div class="report-metrics">
+            ${data.metrics.map(m => `
+              <div class="metric-card">
+                <p class="metric-value">${m.value}</p>
+                <p class="metric-label">${m.label}</p>
+                <p class="metric-detail">${m.detail}</p>
+              </div>
+            `).join('')}
+          </div>
+
+          <div class="report-sections">
+            <div class="report-section">
+              <h4 class="section-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+                </svg>
+                高频痛点
+              </h4>
+              <ul class="section-list">
+                ${data.painPoints.map(p => `<li class="section-item">${p}</li>`).join('')}
+              </ul>
+            </div>
+            <div class="report-section">
+              <h4 class="section-title" style="color: var(--color-cyan-300);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--color-cyan-400);">
+                  <path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 1 1 7.072 0l-.548.547A3.374 3.374 0 0 0 14 18.469V19a2 2 0 1 1-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                </svg>
+                功能请求
+              </h4>
+              <ul class="section-list">
+                ${data.features.map(f => `<li class="section-item" style="color: var(--color-cyan-300);">${f}</li>`).join('')}
+              </ul>
+            </div>
+          </div>
+
+          <div class="report-quotes">
+            <h4 class="quotes-title">用户原话</h4>
+            <div class="quotes-grid">
+              ${data.quotes.map(q => `
+                <div class="quote-card">
+                  <span class="quote-sentiment ${q.sentiment}">${q.sentiment === 'positive' ? '正面' : q.sentiment === 'neutral' ? '中立' : '负面'}</span>
+                  <p class="quote-text">"${q.text}"</p>
+                  <p class="quote-source">${q.source}</p>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+
+        // Add animation
+        sampleReport.style.animation = 'none';
+        sampleReport.offsetHeight;
+        sampleReport.style.animation = 'fadeIn 0.4s ease';
+      });
+    });
   </script>
