@@ -145,6 +145,7 @@ QSTASH_TOKEN=...
 QSTASH_CURRENT_SIGNING_KEY=...
 QSTASH_NEXT_SIGNING_KEY=...
 APP_BASE_URL=https://echosift.online
+CRON_SECRET=generate-a-random-secret
 
 # 可选：网页版异步分析任务控制
 WEB_ANALYSIS_MAX_REVIEWS=150
@@ -160,6 +161,22 @@ GOOGLE_PLAY_WEB_FALLBACK_TIMEOUT_MS=8000
 ANALYZE_RATE_LIMIT_MAX_REQUESTS=10
 ANALYZE_RATE_LIMIT_WINDOW_MS=60000
 ```
+
+### Redis 保活定时任务
+
+`vercel.json` 已配置每天调用一次 `GET /api/cron/redis-keepalive`。该路由会
+对 Upstash Redis 的固定 key `echosift:redis:keepalive` 做一次写入和读回，
+让 Redis 在低流量时期也持续产生轻量命令。
+
+请在 Vercel 环境变量里设置 `CRON_SECRET`。该路由要求请求包含：
+
+```http
+Authorization: Bearer $CRON_SECRET
+```
+
+Vercel Cron 在配置了 `CRON_SECRET` 后会自动带上这个 header。部署后可在
+Vercel cron 日志里确认接口返回 `{ "ok": true }`；如果返回 `503`，说明 Redis
+或 cron secret 环境变量未配置正确。
 
 ### 本地运行
 

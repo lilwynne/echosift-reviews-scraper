@@ -334,6 +334,7 @@ QSTASH_TOKEN=...
 QSTASH_CURRENT_SIGNING_KEY=...
 QSTASH_NEXT_SIGNING_KEY=...
 APP_BASE_URL=https://echosift.online
+CRON_SECRET=generate-a-random-secret
 WEB_ANALYSIS_MAX_REVIEWS=150
 WEB_ANALYSIS_SELECTED_REVIEW_LIMIT=12
 WEB_ANALYSIS_REVIEW_TEXT_MAX_CHARS=280
@@ -388,6 +389,7 @@ Implementation details:
   - Jobs default to fetching 150 reviews, selecting 12 high-value reviews for AI, and trimming each selected review to 280 characters.
   - Selection favors reviews with ratings, longer text, pain/request keywords, votes, and recency.
   - AI returns only a lightweight insight draft; metrics, typical voices, and evidence IDs are built locally from the full `reviews` evidence pool.
+- `vercel.json` schedules `GET /api/cron/redis-keepalive` daily. The route requires `Authorization: Bearer $CRON_SECRET`, then writes and reads `echosift:redis:keepalive` in Upstash Redis to keep the database active during low-traffic periods.
 - Product Hunt sentiment distribution is local and text-based because official GraphQL comments do not include per-comment ratings. Clear praise, usefulness, congratulations, excitement, issues, missing capabilities, attribution concerns, and data transparency concerns should not collapse into neutral.
 - Product Hunt typical voice ranking should prefer ordinary users over maker/founder-style launch comments. Long text and high votes are capped so they cannot dominate representative user voice selection.
 - Analysis cache keys now use `analysis:v5` and include normalized URL, language, max review count, selected review limit, review text character cap, and model type. The Chrome extension session cache prefix is `analysis:v4`. A backend deploy is required to clear stale server-side results; redeploying only the extension cannot fix an old cached `apple-web-page` 8-review response from `echosift.online`.

@@ -145,6 +145,7 @@ QSTASH_TOKEN=...
 QSTASH_CURRENT_SIGNING_KEY=...
 QSTASH_NEXT_SIGNING_KEY=...
 APP_BASE_URL=https://echosift.online
+CRON_SECRET=generate-a-random-secret
 
 # Optional web analysis job controls
 WEB_ANALYSIS_MAX_REVIEWS=150
@@ -160,6 +161,24 @@ GOOGLE_PLAY_WEB_FALLBACK_TIMEOUT_MS=8000
 ANALYZE_RATE_LIMIT_MAX_REQUESTS=10
 ANALYZE_RATE_LIMIT_WINDOW_MS=60000
 ```
+
+### Redis Keepalive Cron
+
+`vercel.json` registers a daily Vercel Cron job for `GET /api/cron/redis-keepalive`.
+The route writes and reads a fixed Upstash Redis key, `echosift:redis:keepalive`,
+so the Redis database keeps receiving lightweight commands even during quiet
+periods.
+
+Set `CRON_SECRET` in Vercel. The route requires:
+
+```http
+Authorization: Bearer $CRON_SECRET
+```
+
+Vercel Cron sends this header automatically when `CRON_SECRET` is configured.
+After deployment, the endpoint should return `{ "ok": true }` in Vercel cron
+logs. A `503` response means Redis or cron secret environment variables are not
+configured correctly.
 
 ### Running Locally
 
